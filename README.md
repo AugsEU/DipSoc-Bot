@@ -1,17 +1,17 @@
 # Dipsoc bot
 
-DipSoc bot can only play one game at a time.
+DipSoc bot can only play one game at a time.  
 
-!avalon - start a game of avalon.
+!avalon - start a game of avalon.  
 
-!status - get the current status of the bot
+!status - get the current status of the bot  
 
-!ding
+!ding  
 
-For help on individual games try !help avalon or !help slots
+For help on individual games try !help avalon or !help slots  
 
-# Current games:
+# Current games:  
 
-* avalon
+* avalon  
 
-* slots
+* slots  
