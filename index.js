@@ -11,14 +11,14 @@ const STATUS = {
 
 var BotStatus = STATUS.READY;
 var BotChannel;
+var BankAccounts = [];
 
 BOT.on("ready", () =>{
+    LoadAccounts();
     console.log("Bot is online.");
-    setTimeout(ClearDebts, 10600);
 })
 
 BOT.on("message", msg =>{
-    if((Date.now() - ClearDebtTime) > 3600000) ClearDebts();
     if(msg.author.bot) return;//ignore any bots(including this one)
     if(msg.content.indexOf(config.prefix) !== 0) return;
 
@@ -86,6 +86,9 @@ BOT.on("message", msg =>{
             BotChannel = msg.channel;
             BotChannel.send("Default bot channel is #" + BotChannel.name);
             break;
+        case "account":
+            ShowBalance(msg);
+            break;
         case "ding":
             msg.reply("URCH");
             break;
@@ -135,6 +138,10 @@ BOT.on("message", msg =>{
             case "assassinate":
                 AssassinateAvalon(msg);
                 break;
+            case "prevmissions":
+                PreviousAvalon(msg);
+                break;
+            
         }
     }
     else if(BotStatus === STATUS.MIND)
@@ -168,6 +175,76 @@ BOT.on("message", msg =>{
 })
 
 BOT.login(config.token);
+
+///
+///Dipsoc bank accounts
+///
+
+function LoadAccounts()
+{
+    var BankData = [];
+    try 
+    {
+        const data = fs.readFileSync(config.botPath + 'Accounts.txt', 'utf8');
+        BankData = data.split(/\r?\n/);//split by new line
+    } 
+    catch (err) 
+    {
+        console.error(err);
+        CloseBot();
+    }
+
+    for(var i = 0; i < BankData.length; i++)
+    {
+        var Line = BankData[i].split(" ");
+        BankAccounts.push([Line[0], Line[1]])
+    }
+}
+
+function SaveAccounts()
+{
+    var BankText = "";
+    for(var i = 0; i < BankAccounts.length; i++)
+    {
+        BankText = BankText + BankAccounts[i][0] + " " + BankAccounts[i][1];
+        if(i != BankAccounts.length-1)
+        {
+            BankText = BankText + "\n";
+        }
+    }
+    
+    try 
+    {
+        const data = fs.writeFileSync(config.botPath + 'Accounts.txt', BankText);
+        //file written successfully
+    } 
+    catch (err)
+    {
+        console.error(err);
+        CloseBot();
+    }
+}
+
+function ShowBalance(msg)
+{
+    var foundAcc = false;
+    var ReplyMsg = "";
+    for(var i = 0; i < BankAccounts.length; i++)
+    {
+        if(BankAccounts[i][0] == msg.member.id)
+        {
+            foundAcc = true;
+            ReplyMsg = "you have " + BankAccounts[i][1] + "$."
+        }
+    }
+    if(!foundAcc)
+    {
+        ReplyMsg = "you don't have an account. Type \"!slots pull\" to create one."
+    }
+
+    msg.reply(ReplyMsg);
+}
+
 
 ///
 ///Avalon
@@ -241,6 +318,8 @@ var AAssassinIndex;
 var AMissionPeople;
 var AVotes;
 var PreviousLadies;
+var PreviousMissions;
+var PrevKings;
 
 
 
@@ -259,6 +338,8 @@ function InitAvalon()
     AMissionPeople = [];
     AVotes = [];
     PreviousLadies = [];
+    PreviousMissions = [];
+    PrevKings = [];
 }
 
 function JoinAvalon(msg)
@@ -758,6 +839,8 @@ function AvalonVote(vote, msg)
 
 function MissionBreif()
 {
+    PreviousMissions.push(AMissionPeople);//add this mission to the log
+    PrevKings.push(APlayers[mod(AKingIndex - 1, APlayers.length)][1].displayName);
     AvalonChannel.send("The adventurers set out on their valiant quest...\nThose who are on the mission, please vote !success or !fail in __***direct messages***__.");
     AVotes = [] //Init votes
     for(var i = 0; i < APlayers.length; i++)
@@ -843,7 +926,7 @@ function AvalonMissionVote(vote, msg)
     
     if(MissionHealth > 0)//Mission Success
     {
-        AvalonChannel.send(MissionResults + ":confetti_ball:The mission passed.:confetti_ball:\n---------------\n");
+        AvalonChannel.send(MissionResults + ":confetti_ball:The mission passed.:confetti_ball:\nNumber of fails:"+ (StartHealth - MissionHealth).toString() + "\n---------------\n");
         AMissions[AMissionIdx] = true;
     }
     else//Mission Rejected
@@ -1045,11 +1128,14 @@ function AssassinateAvalon(msg)
 
     if(MerlinDead || !DidWin(AMissions))
     {
-        FinalMessage = FinalMessage + ":japanese_goblin::japanese_goblin::japanese_goblin:***EVIL TEAM WINS!***:japanese_goblin::japanese_goblin::japanese_goblin:\n"
+        FinalMessage = FinalMessage + ":japanese_goblin::japanese_goblin::japanese_goblin:***EVIL TEAM WINS!***:japanese_goblin::japanese_goblin::japanese_goblin:\n";
+        //Give evil team money
+        FinalMessage = FinalMessage + AMoneyReward(true);
     }
     else
     {
-        FinalMessage = FinalMessage + ":confetti::innocent::confetti:***GOOD TEAM WINS!***:confetti::innocent::confetti:\n"
+        FinalMessage = FinalMessage + ":confetti_ball::innocent::confetti_ball:***GOOD TEAM WINS!***:confetti_ball::innocent::confetti_ball:\n";
+        FinalMessage = FinalMessage + AMoneyReward(false);
     }
 
     FinalMessage = FinalMessage + "The final roles were:\n"
@@ -1061,6 +1147,31 @@ function AssassinateAvalon(msg)
 
     AvalonChannel.send(FinalMessage);
     BotStatus = STATUS.READY;
+}
+
+function AMoneyReward(EvilWin)
+{
+    var BankMessage = "";
+    for(var iPlayer = 0; iPlayer < APlayers.length; iPlayer++)
+    {
+        if(APlayers[iPlayer][3] == EvilWin)//if they are evil
+        {
+            for(var iAcc = 0; iAcc < BankAccounts.length; iAcc++)
+            {
+                if(APlayers[iPlayer][1].id == BankAccounts[iAcc][0])
+                {
+                    if(BankAccounts[iAcc][0] < 12)
+                    {
+                        BankAccounts[iAcc][0] = 12;
+                        BankMessage = BankMessage + APlayers[iPlayer][1].displayName + " has been reimbursed and now has 12$ in their account.:dollar:\n";
+                    }
+                }
+            }
+        }
+    }
+
+    SaveAccounts();
+    return BankMessage;
 }
 
 function DisplayBoard()
@@ -1090,6 +1201,43 @@ function DisplayBoard()
         Board = Board + DigitToEmoji(MissionPresets[APlayers.length][i]);
     }
     AvalonChannel.send(Board);
+}
+
+function PreviousAvalon(msg)
+{
+
+    if(([AVALONSTATE.JOIN,AVALONSTATE.GAME_READY, AVALONSTATE.GAME_END].includes(AState)))
+    {
+        msg.reply("there's a time and place for everything. But not now!");
+        return;
+    }
+
+    if(PreviousMissions.length == 0)
+    {
+        msg.reply("There haven't been any previous missions.");
+        return;
+    }
+
+    var MissionsEmbed = new DISCORD.MessageEmbed()
+	.setColor('#EEFF32')
+	.setTitle("Previous missions")
+    .setAuthor("Avalon", "https://i.imgur.com/wGaN5z0.png")
+
+    for(var i = 0; i < PreviousMissions.length;i++)
+    {
+        var MissionString = ""
+        for(var j = 0; j < PreviousMissions[i].length;j++)
+        {
+            MissionString = MissionString + APlayers[PreviousMissions[i][j]][1].displayName;
+            if(j != PreviousMissions[i].length-1)
+            {
+                MissionString = MissionString + ", ";
+            }
+        }
+        MissionsEmbed.addField("Quest " + (i+1).toString() + " proposed by " + PrevKings[i] + ":",MissionString,true);
+    }
+
+    AvalonChannel.send(MissionsEmbed);
 }
 
 ///
@@ -1392,16 +1540,12 @@ function RemoveCardFromHand(Card, Pidx)
 ///                    0       1         2          3        4       5
 const SlotSymbols = [":x:",":lemon:",":cherries:",":house:",":atm:",":100:"];
 
-
-var SPlayers = [];
-var ClearDebtTime = Date.now();
-
 function PullSlot(msg)
 {
     var PlayerIndex = -1;
-    for(var i = 0; i < SPlayers.length; i++)
+    for(var i = 0; i < BankAccounts.length; i++)
     {
-        if(msg.author.id == SPlayers[i][0].id)
+        if(msg.author.id == BankAccounts[i][0])
         {
             PlayerIndex = i;
             break;
@@ -1410,17 +1554,17 @@ function PullSlot(msg)
 
     if(PlayerIndex == -1)
     {
-        PlayerIndex = SPlayers.length;
-        SPlayers.push([msg.member,10]);//create account
-        msg.reply("you haven't played this session. You start with $10");
+        PlayerIndex = BankAccounts.length;
+        BankAccounts.push([msg.member.id,10]);//create account
+        msg.reply("you don't yet have a dipsoc bank account. A new one has been opened with 10$.");
     }
 
-    if(SPlayers[PlayerIndex][1] <= 1)
+    if(BankAccounts[PlayerIndex][1] <= 1)
     {
         return;
     }
 
-    SPlayers[PlayerIndex][1]-= 2;//Pay 2 for the slot
+    BankAccounts[PlayerIndex][1]-= 2;//Pay 2 for the slot
 
     var SlotResults = [Math.floor(Math.random() * (SlotSymbols.length)),Math.floor(Math.random() * (SlotSymbols.length)),Math.floor(Math.random() * (SlotSymbols.length))];
     var SlotBreif = "You put 2$ in the slot machine...\n";
@@ -1450,34 +1594,40 @@ function PullSlot(msg)
         Gain = Math.max(...SlotResults) - 1;
     }
 
-    SPlayers[PlayerIndex][1] += Gain;
+    BankAccounts[PlayerIndex][1] += Gain;
 
-    SlotBreif = SlotBreif + "\nYou won " + Gain + "$. You now have " + SPlayers[PlayerIndex][1] +"$.";
+    SlotBreif = SlotBreif + "\nYou won " + Gain + "$. You now have " + BankAccounts[PlayerIndex][1] +"$.\n";
 
-    if(SPlayers[PlayerIndex][1] <= 1)
+    if(BankAccounts[PlayerIndex][1] <= 1)
     {
-        SlotBreif = SlotBreif + "\n:skull:You can't play slots until next time.:skull:"
+        SlotBreif = SlotBreif + "\n:skull:You can't play slots until you get more money.:skull:\n"
     }
 
-    WriteHS(PlayerIndex);
+    WriteHS(PlayerIndex, msg.member.displayName);
 
+    if(Gain > 5)
+    {
+        ClearDebts();
+        SlotBreif = SlotBreif + ":game_die::black_joker::dollar: To celebrate this big win, all accounts have been bumped up to 10$.";
+    }
 
+    SaveAccounts();
     msg.channel.send(SlotBreif);
 }
 
-function WriteHS(PlayerIndex)
+function WriteHS(PlayerIndex, name)
 {
     var HS = GetSlotHS();
-    if(SPlayers[PlayerIndex][1] > HS[1])
+    if(BankAccounts[PlayerIndex][1] > HS[1])
     {
         console.log("High score:" + HS.toString());
-        HS[0] = SPlayers[PlayerIndex][0].displayName;
-        HS[1] = SPlayers[PlayerIndex][1];
+        HS[0] = name;
+        HS[1] = BankAccounts[PlayerIndex][1];
     }
     
     try 
     {
-        const data = fs.writeFileSync('C:\\Users\\August\\Documents\\Discord\\SlotHS.txt', HS[0] + " " + HS[1]);
+        const data = fs.writeFileSync(config.botPath + 'SlotHS.txt', HS[0] + " " + HS[1]);
         //file written successfully
     } 
     catch (err)
@@ -1487,11 +1637,11 @@ function WriteHS(PlayerIndex)
     }
 }
 
-function GetSlotHS() //
+function GetSlotHS()
 {
     try 
     {
-        const data = fs.readFileSync('C:\\Users\\August\\Documents\\Discord\\SlotHS.txt', 'utf8');
+        const data = fs.readFileSync(config.botPath + 'SlotHS.txt', 'utf8');
         var HSData = data.split(" ");
         HSData[1] = Number(HSData[1]);
     } 
@@ -1505,16 +1655,14 @@ function GetSlotHS() //
 
 function ClearDebts()
 {
-    SPlayers = [];
-    try
+    for(var i = 0; i < BankAccounts.length;i++)
     {
-        BotChannel.send(":game_die::black_joker::dollar: All slot machine debts have been cleared.");
+        if(BankAccounts[i][1] < 10)
+        {
+            BankAccounts[i][1] = 10;
+        }
     }
-    catch
-    {
-
-    }
-    ClearDebtTime = Date.now();
+    BotChannel.send(":game_die::black_joker::dollar: All slot machine debts have been cleared.");
 }
 
 ///
