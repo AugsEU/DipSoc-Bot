@@ -43,9 +43,13 @@ BOT.on("message", msg =>{
             break;
         case "status":
             msg.channel.send("Current Status: " + BotStatus);
+            if(BotStatus == STATUS.AVALON)
+            {
+                msg.channel.send("Avalon status:"+ AState); 
+            }
             break;
         case "avalon":
-            if(BotStatus === STATUS.READY)
+            if(BotStatus == STATUS.READY)
             {
                 BotStatus = STATUS.AVALON;
                 msg.channel.send("A game of Avalon is starting in #" + msg.channel.name + ". Enter !join if you want to join the game.");
@@ -94,7 +98,7 @@ BOT.on("message", msg =>{
             break;
     }
 
-    if(BotStatus === STATUS.AVALON)
+    if(BotStatus == STATUS.AVALON)
     {
         switch(args[0])
         {
@@ -108,8 +112,8 @@ BOT.on("message", msg =>{
             case "who":
                 WhoAvalon(msg);
                 break;
-            case "evil":
-                DeclareEvil(msg);
+            case "roles":
+                DeclareRoles(msg);
                 break;
             case "start":
                 StartAvalon(msg);
@@ -140,6 +144,9 @@ BOT.on("message", msg =>{
                 break;
             case "prevmissions":
                 PreviousAvalon(msg);
+                break;
+            case "sfx":
+                AvalonSfx(msg);
                 break;
             
         }
@@ -185,7 +192,7 @@ function LoadAccounts()
     var BankData = [];
     try 
     {
-        const data = fs.readFileSync(config.botPath + 'Accounts.txt', 'utf8');
+        const data = fs.readFileSync('./Accounts.txt', 'utf8');
         BankData = data.split(/\r?\n/);//split by new line
     } 
     catch (err) 
@@ -215,7 +222,7 @@ function SaveAccounts()
     
     try 
     {
-        const data = fs.writeFileSync(config.botPath + 'Accounts.txt', BankText);
+        const data = fs.writeFileSync('./Accounts.txt', BankText);
         //file written successfully
     } 
     catch (err)
@@ -264,14 +271,17 @@ const AVALONSTATE =
 
 const AVALONROLES = 
 {
-    NGOOD : "neutral good:slight_smile:",
+    NGOOD : "Neutral good:slight_smile:",
     MERLIN : "Merlin:man_mage:",
     PERCIVAL : "Percival:man_police_officer:",
     MORGANA : "Morgana:woman_detective:",
     MORDRED: "Mordred:japanese_ogre:",
     OBERON: "Oberon:clown:",
     ASSASSIN: "Assassin:vampire:",
-    NEVIL: "neutral evil:japanese_goblin:"
+    NEVIL: "Neutral evil:japanese_goblin:",
+    JEFFERY: "Jeffery:genie:",
+    GLANCELOT: "The good Lancelot:superhero:",
+    BLANCELOT: "The evil Lancelot:supervillain:"
 }
 
 const EvilPresets = [
@@ -286,8 +296,9 @@ const EvilPresets = [
                     [AVALONROLES.MORGANA, AVALONROLES.MORDRED, AVALONROLES.OBERON],//8 players, 3 evil
                     [AVALONROLES.MORGANA, AVALONROLES.MORDRED, AVALONROLES.ASSASSIN],//9 players, 3 evil
                     [AVALONROLES.MORGANA, AVALONROLES.MORDRED, AVALONROLES.OBERON, AVALONROLES.ASSASSIN]//10 players, 3 evil
-]
-;
+];
+
+const GoodPreset = [AVALONROLES.MERLIN, AVALONROLES.PERCIVAL];
 
 const MissionPresets = [
                         [],//0 players
@@ -304,10 +315,12 @@ const MissionPresets = [
 ]
 
 var AvalonChannel;
+var AvalonSFXConnection;
 
 var AState;
 var APlayers;
 var AEvilList;
+var AGoodList;
 
 var AMissions;
 var AMissionIdx;
@@ -320,7 +333,8 @@ var AVotes;
 var PreviousLadies;
 var PreviousMissions;
 var PrevKings;
-
+var IsLancelot;
+var LancelotDeck;
 
 
 function InitAvalon()
@@ -328,7 +342,7 @@ function InitAvalon()
     AState = AVALONSTATE.JOIN;
     APlayers = [];//Start with no players
     AEvilList = [];
-
+    AGoodList = [];
     AMissions = [false,false,false,false,false];//All missions start failed :<
     AMissionIdx = 0;
     AKingStage = 1;
@@ -340,6 +354,42 @@ function InitAvalon()
     PreviousLadies = [];
     PreviousMissions = [];
     PrevKings = [];
+    IsLancelot = false;
+    LancelotDeck = [false,false,false,true,true];
+}
+
+async function AvalonSfx(msg)
+{
+    if(msg.channel !== AvalonChannel)
+    {
+        msg.reply("please say that in the channel where the game is being played.");
+        return;
+    }
+
+    if(AvalonSFXConnection)
+    {
+        await AvalonSFXConnection.channel.leave();
+        AvalonSFXConnection = null;
+        AvalonChannel.send("Sound effects: OFF.");
+        return;
+    }
+
+    var Message = "";
+    if(msg.guild)
+    {
+        if (msg.member.voice.channel) 
+        {
+            AvalonSFXConnection = await msg.member.voice.channel.join();
+            AvalonChannel.send("Sound effects: ON.");
+            return;
+        } 
+        else 
+        {
+            Message = Message + "you need to be in a voice channel to do that.";
+        }
+    }
+    msg.reply("connection failed.");
+
 }
 
 function JoinAvalon(msg)
@@ -368,7 +418,25 @@ function JoinAvalon(msg)
     }
     else
     {
-        msg.channel.send("You can't join; the game is already in progress.")
+        msg.channel.send("You can't join; the game is already in progress.");
+    }
+
+}
+
+function PlaySFX(path)
+{
+    try
+    {
+    var dispatcher = AvalonSFXConnection.play(path);
+    dispatcher.setVolume(0.1); 
+    dispatcher.on('finish', () => {
+        dispatcher.destroy(); 
+      });
+    }
+    catch(err)
+    {
+        console.error(err);
+        AvalonChannel.send("Error playing sound effect.");
     }
 }
 
@@ -383,9 +451,8 @@ function WhoAvalon(msg)
     msg.channel.send(PlayerList);
 }
 
-function DeclareEvil(msg)
+function DeclareRoles(msg)
 {
-
     if(msg.channel !== AvalonChannel)
     {
         msg.reply("please say that in the channel where the game is being played.");
@@ -397,6 +464,7 @@ function DeclareEvil(msg)
         var noSpace = msg.content.replace(/\s+/g, " ");
         var args = noSpace.substring(config.prefix.length).split(" ");
         AEvilList = [];
+        AGoodList = [];
         for (i = 1; i < args.length; i++) 
         {
             switch(args[i].toLowerCase())
@@ -419,14 +487,33 @@ function DeclareEvil(msg)
                 case "nevil":
                     AEvilList.push(AVALONROLES.NEVIL);
                     break;
+                case "ngood":
+                    AGoodList.push(AVALONROLES.NGOOD);
+                    break;
+                case "percival":
+                    AGoodList.push(AVALONROLES.PERCIVAL);
+                    break;
+                case "merlin":
+                    AGoodList.push(AVALONROLES.MERLIN);
+                    break;
+                case "jeffery":
+                    AGoodList.push(AVALONROLES.JEFFERY);
+                    break;
+                case "lancelot":
+                    AGoodList.push(AVALONROLES.GLANCELOT);
+                    AEvilList.push(AVALONROLES.BLANCELOT);
+                    break;
             }
         }
-        msg.channel.send("The current evil people are: " + AEvilList.toString());
-        msg.channel.send("Additional roles will be added automatically if needed.");
+        var Message = "";
+        Message = Message + ("The current evil people are: " + AEvilList.toString() + "\n");
+        Message = Message + ("The current good people are: " + AGoodList.toString() + "\n");
+        Message = Message + ("Additional roles will be added automatically if needed.");
+        AvalonChannel.send(Message);
     }
     else
     {
-        msg.channel.send("The game has already started, evil people can't be decreed.");
+        msg.channel.send("The game has already started, roles can't be decreed.");
     }
 }
 
@@ -446,12 +533,34 @@ function GetAvalonRoles()
         }
     }
 
-    ReturnRoles.push(AVALONROLES.MERLIN);
-    ReturnRoles.push(AVALONROLES.PERCIVAL);
-
-    for(var i = NumOfEvil+2; i < APlayers.length; i++)
+    for(var i = 0; i < (APlayers.length - NumOfEvil); i++)//fill in evil roles
     {
-        ReturnRoles.push(AVALONROLES.NGOOD);//Rest are neutral good.
+        if(i < AGoodList.length)
+        {
+            if(AGoodList[i] == AVALONROLES.JEFFERY)
+            {
+                if(Math.random() < 0.5)
+                {
+                    AGoodList[i] = AVALONROLES.MERLIN;//replace with normal merlin
+                }
+            }
+            ReturnRoles.push(AGoodList[i]);
+        }
+        else
+        {
+            if(!ReturnRoles.includes(AVALONROLES.MERLIN) && !ReturnRoles.includes(AVALONROLES.JEFFERY))
+            {
+                ReturnRoles.push(AVALONROLES.MERLIN);
+            }
+            else if(!ReturnRoles.includes(AVALONROLES.PERCIVAL))
+            {
+                ReturnRoles.push(AVALONROLES.PERCIVAL);
+            }
+            else
+            {
+                ReturnRoles.push(AVALONROLES.NGOOD);
+            }
+        }
     }
 
     return ReturnRoles;
@@ -487,16 +596,28 @@ function StartAvalon(msg)//now that everyone has joined and evil are declared, t
     StartMessage = StartMessage + "The following roles are in the game:\n";
     for(var i = 0; i < Roles.length; i++)
     {
-        StartMessage = StartMessage + Roles[i] + "\n";
+        //TODO
+        if(Roles[i] == AVALONROLES.JEFFERY)
+        {
+            StartMessage = StartMessage + AVALONROLES.MERLIN + "\n";
+        }
+        else
+        {
+            StartMessage = StartMessage + Roles[i] + "\n";
+        }
     }
-
+    if(Roles.includes(AVALONROLES.GLANCELOT) || Roles.includes(AVALONROLES.BLANCELOT))
+    {
+        IsLancelot = true;
+        shuffle(LancelotDeck);
+    }
     shuffle(Roles);
     shuffle(APlayers);
     //Give roles
     for(var i = 0; i < Roles.length; i++)
     {
         APlayers[i][2] = Roles[i];//assing roles
-        if([AVALONROLES.MERLIN, AVALONROLES.NGOOD, AVALONROLES.PERCIVAL].includes(Roles[i]))
+        if([AVALONROLES.MERLIN, AVALONROLES.NGOOD, AVALONROLES.PERCIVAL, AVALONROLES.JEFFERY, AVALONROLES.GLANCELOT].includes(Roles[i]))
         {
             APlayers[i][3] = false;
         }
@@ -505,8 +626,9 @@ function StartAvalon(msg)//now that everyone has joined and evil are declared, t
             APlayers[i][3] = true;
         }
     }
+
     //Determine assassin
-    var AssassinPriority = [AVALONROLES.ASSASSIN, AVALONROLES.MORGANA, AVALONROLES.NEVIL, AVALONROLES.MORDRED, AVALONROLES.OBERON];
+    var AssassinPriority = [AVALONROLES.ASSASSIN, AVALONROLES.MORGANA, AVALONROLES.BLANCELOT, AVALONROLES.NEVIL, AVALONROLES.MORDRED, AVALONROLES.OBERON];
     AAssassinIndex = -1;
     var PriorityIdx = 0;
     while(AAssassinIndex === -1)
@@ -521,10 +643,22 @@ function StartAvalon(msg)//now that everyone has joined and evil are declared, t
         PriorityIdx++;
         if(PriorityIdx >= AssassinPriority.length)
         {
-            msg.channel.send("Error! Could not find assassin.");
+            msg.channel.send("Error! Could not find assassin. Ending game...");
+            BotStatus = STATUS.READY;
             return;
         }
     }
+
+    var JefferyNumber = 0;
+
+    for(var j = 0; j < APlayers.length; j++)
+    {
+        if([AVALONROLES.NEVIL, AVALONROLES.OBERON, AVALONROLES.MORGANA, AVALONROLES.ASSASSIN, AVALONROLES.BLANCELOT].includes(APlayers[j][2]))
+        {
+            JefferyNumber++;
+        }   
+    }
+    console.log(APlayers.toString());
     //Send DMs with info.
     for(var i = 0; i < APlayers.length; i++)
     {
@@ -535,10 +669,29 @@ function StartAvalon(msg)//now that everyone has joined and evil are declared, t
                 SpecialMessage = "You are Merlin!\n:man_mage:\nThe following people are evil:\n";
                 for(var j = 0; j < APlayers.length; j++)
                 {
-                    if([AVALONROLES.NEVIL, AVALONROLES.OBERON, AVALONROLES.MORGANA, AVALONROLES.ASSASSIN].includes(APlayers[j][2]))
+                    if([AVALONROLES.NEVIL, AVALONROLES.OBERON, AVALONROLES.MORGANA, AVALONROLES.ASSASSIN, AVALONROLES.BLANCELOT].includes(APlayers[j][2]))
                     {
                         SpecialMessage = SpecialMessage + APlayers[j][1].displayName + "\n";
                     }   
+                }
+                SpecialMessage = SpecialMessage + "\nDon't tell people you are merlin!";
+                break;
+            case AVALONROLES.JEFFERY:
+                SpecialMessage = "You are Merlin!\n:man_mage:\nThe following people are evil:\n";
+                var JeffCount = JefferyNumber;
+                for(var j = 0; j < APlayers.length; j++)
+                {
+                    if(i == j) continue;
+                    if(!APlayers[j][3])//good people
+                    {
+                        SpecialMessage = SpecialMessage + APlayers[j][1].displayName + "\n";
+                        JeffCount--;
+                    }
+
+                    if(JeffCount == 0)
+                    {
+                        break;
+                    }
                 }
                 SpecialMessage = SpecialMessage + "\nDon't tell people you are merlin!";
                 break;
@@ -546,7 +699,7 @@ function StartAvalon(msg)//now that everyone has joined and evil are declared, t
                 SpecialMessage = "You are Percival!\n:man_police_officer:\nThe following people are Morgana or Merlin:\n";
                 for(var j = 0; j < APlayers.length; j++)
                 {
-                    if([AVALONROLES.MERLIN, AVALONROLES.MORGANA].includes(APlayers[j][2]))
+                    if([AVALONROLES.MERLIN, AVALONROLES.MORGANA, AVALONROLES.JEFFERY].includes(APlayers[j][2]))
                     {
                         SpecialMessage = SpecialMessage + APlayers[j][1].displayName + "\n";
                     }
@@ -558,7 +711,7 @@ function StartAvalon(msg)//now that everyone has joined and evil are declared, t
                 for(var j = 0; j < APlayers.length; j++)
                 {
 
-                    if([AVALONROLES.NEVIL, AVALONROLES.MORDRED, AVALONROLES.MORGANA, AVALONROLES.ASSASSIN].includes(APlayers[j][2]))
+                    if([AVALONROLES.NEVIL, AVALONROLES.MORDRED, AVALONROLES.MORGANA, AVALONROLES.ASSASSIN, AVALONROLES.BLANCELOT].includes(APlayers[j][2]))
                     {
                         if(i == j) continue;
                         SpecialMessage = SpecialMessage + APlayers[j][1].displayName + "\n";
@@ -570,7 +723,7 @@ function StartAvalon(msg)//now that everyone has joined and evil are declared, t
                 SpecialMessage = "You are Morgana!\n:woman_detective:\nThe following people are your evil buddies:\n";
                 for(var j = 0; j < APlayers.length; j++)
                 {
-                    if([AVALONROLES.NEVIL, AVALONROLES.MORDRED, AVALONROLES.MORGANA, AVALONROLES.ASSASSIN].includes(APlayers[j][2]))
+                    if([AVALONROLES.NEVIL, AVALONROLES.MORDRED, AVALONROLES.MORGANA, AVALONROLES.ASSASSIN, AVALONROLES.BLANCELOT].includes(APlayers[j][2]))
                     {
                         if(i == j) continue;
                         SpecialMessage = SpecialMessage + APlayers[j][1].displayName  + "\n";
@@ -582,7 +735,7 @@ function StartAvalon(msg)//now that everyone has joined and evil are declared, t
                 SpecialMessage = "You are the Assassin!\n:vampire:\nThe following people are your evil buddies:\n";
                 for(var j = 0; j < APlayers.length; j++)
                 {
-                    if([AVALONROLES.NEVIL, AVALONROLES.MORDRED, AVALONROLES.MORGANA, AVALONROLES.ASSASSIN].includes(APlayers[j][2]))
+                    if([AVALONROLES.NEVIL, AVALONROLES.MORDRED, AVALONROLES.MORGANA, AVALONROLES.ASSASSIN, AVALONROLES.BLANCELOT].includes(APlayers[j][2]))
                     {
                         if(i == j) continue;
                         SpecialMessage = SpecialMessage + APlayers[j][1].displayName  + "\n";
@@ -597,13 +750,19 @@ function StartAvalon(msg)//now that everyone has joined and evil are declared, t
                 SpecialMessage = "You are the neutral evil...\n:japanese_goblin:\nThe following people are your evil buddies:\n";
                 for(var j = 0; j < APlayers.length; j++)
                 {
-                    if([AVALONROLES.NEVIL, AVALONROLES.MORDRED, AVALONROLES.MORGANA, AVALONROLES.ASSASSIN].includes(APlayers[j][2]))
+                    if([AVALONROLES.NEVIL, AVALONROLES.MORDRED, AVALONROLES.MORGANA, AVALONROLES.ASSASSIN, AVALONROLES.BLANCELOT].includes(APlayers[j][2]))
                     {
                         if(i == j) continue;
                         SpecialMessage = SpecialMessage + APlayers[j][1].displayName  + "\n";
                     }
                 }
                 SpecialMessage = SpecialMessage + "\nToo bad you got this role. Better luck next time.";
+                break;
+            case AVALONROLES.GLANCELOT:
+                SpecialMessage = "You are the good Lancelot!\n:superhero:\nYou might switch allegiance, if a swap card is drawn after the third, fourth, or fifth missions.\n";
+                break;
+            case AVALONROLES.BLANCELOT:
+                SpecialMessage = "You are the evil Lancelot!\n:supervillain:\nYou might switch allegiance, if a swap card is drawn after the third, fourth, or fifth missions.\n";
                 break;
             case AVALONROLES.NGOOD:
                 SpecialMessage = "You are the neutral good!\n:slight_smile:\nAct confident and mislead your entire team.\n";
@@ -612,7 +771,7 @@ function StartAvalon(msg)//now that everyone has joined and evil are declared, t
         APlayers[i][1].send("-----------------\n Your Avalon secret identity \n-----------------\n" + SpecialMessage);
     }
 
-    
+    shuffle(APlayers);
     
     AKingStage = 1;
     AKingIndex = Math.floor(Math.random() * APlayers.length);
@@ -647,7 +806,14 @@ function BreifKing()
         }
         if(RealIndex === mod(AKingIndex + 5 - AKingStage, APlayers.length))
         {
-            KingBreif = KingBreif + ":man_judge: ";
+            if(Math.random() < 0.5)
+            {
+                KingBreif = KingBreif + ":man_judge: ";
+            }
+            else
+            {
+                KingBreif = KingBreif + ":woman_judge: ";
+            }
         }
         KingBreif = KingBreif + APlayers[RealIndex][1].displayName +" | ";
     }
@@ -691,24 +857,17 @@ function MissionAvalon(msg)
         return;
     }
 
-    console.log("Players: " + APlayers.toString());
-
     for(var i = 1; i < args.length;i++)//add people to mission.
     {
         var foundPerson = false;
         var LookingFor = args[i];
         var LookingFor = args[i].replace(/[\\<>@#&!]/g, "");
-        console.log("looking for :" + LookingFor);
         for(var j = 0; j < APlayers.length; j++)//search for each person.
         {
             if(APlayers[j][1].id == LookingFor)
             {
                 AMissionPeople.push(j);
                 foundPerson = true;
-            }
-            else
-            {
-                console.log("|"+LookingFor+"| is not |"+APlayers[j][1].id+"|");
             }
         }
 
@@ -927,11 +1086,19 @@ function AvalonMissionVote(vote, msg)
     if(MissionHealth > 0)//Mission Success
     {
         AvalonChannel.send(MissionResults + ":confetti_ball:The mission passed.:confetti_ball:\nNumber of fails:"+ (StartHealth - MissionHealth).toString() + "\n---------------\n");
+        if(AvalonSFXConnection)
+        {
+            PlaySFX("./mission_win.mp3");
+        }
         AMissions[AMissionIdx] = true;
     }
     else//Mission Rejected
     {
         AvalonChannel.send(MissionResults + ":x:The mission failed :x:.\nNumber of fails:"+ (StartHealth - MissionHealth).toString() + "\n---------------\n");
+        if(AvalonSFXConnection)
+        {
+            PlaySFX("./mission_fail.mp3");
+        }
         AMissions[AMissionIdx] = false;
     }
 
@@ -967,7 +1134,6 @@ function AvalonMissionVote(vote, msg)
     else if(AMissionIdx == 5)
     {
         DisplayBoard();
-        //TODO: End the game
         AState = AVALONSTATE.ASSASSINATE;
         AssassinBreif();
     }
@@ -975,8 +1141,40 @@ function AvalonMissionVote(vote, msg)
     {//Do lady of the lake.
         DisplayBoard();
         AState = AVALONSTATE.LADY;
+        if(IsLancelot) LancelotDraw();
         BreifLady();
     }
+}
+
+function LancelotDraw()
+{
+    var Card = LancelotDeck.pop();
+    var LancelotMessage = "You draw a card from the \"swap deck\":";
+    if(Card)
+    {
+        LancelotMessage = LancelotMessage + ":arrows_counterclockwise:\n*Lancelots switch allegiance.*";//
+        var NewPlayers = APlayers;
+        for(var i = 0; i < APlayers.length; i++)
+        {
+            if(APlayers[i][2] == AVALONROLES.BLANCELOT)
+            {
+                NewPlayers[i][2] = AVALONROLES.GLANCELOT;
+                NewPlayers[i][3] = false;
+                NewPlayers[i][1].send("You have switched allegiance\nYou are now the good Lancelot:superhero:.");
+            }
+            else if(APlayers[i][2] == AVALONROLES.GLANCELOT)
+            {
+                NewPlayers[i][2] = AVALONROLES.BLANCELOT;
+                NewPlayers[i][3] = true;
+                NewPlayers[i][1].send("You have switched allegiance\nYou are now the evil Lancelot:supervillain:.");
+            }
+        }
+    }
+    else
+    {
+        LancelotMessage = LancelotMessage + ":stop_button:\n*Lancelots do not switch allegiance.*"
+    }
+    AvalonChannel.send(LancelotMessage);
 }
 
 function BreifLady()
@@ -1120,21 +1318,48 @@ function AssassinateAvalon(msg)
     {
         MerlinDead = true;
         FinalMessage = ":skull_crossbones::x::man_mage:Merlin is dead!:man_mage::x::skull_crossbones:\n";
+        if(AvalonSFXConnection)
+        {
+            PlaySFX("./merlin_kill.mp3");
+        }
+    }
+    else if(APlayers[DeadPerson][2] == AVALONROLES.JEFFERY)
+    {
+        MerlinDead = true;
+        FinalMessage = "Merlin sees that his younger brother Jeffery is about to get killed and jumps in the way.\n:skull_crossbones::x::man_mage:Merlin is dead!:man_mage::x::skull_crossbones:\n";
+        if(AvalonSFXConnection)
+        {
+            PlaySFX("./merlin_kill.mp3");
+        }
     }
     else
     {
         FinalMessage = "You killed " + APlayers[DeadPerson][2] + "\n";
+        if(AvalonSFXConnection)
+        {
+            PlaySFX("./merlin_miss.mp3");
+        }
     }
 
     if(MerlinDead || !DidWin(AMissions))
     {
         FinalMessage = FinalMessage + ":japanese_goblin::japanese_goblin::japanese_goblin:***EVIL TEAM WINS!***:japanese_goblin::japanese_goblin::japanese_goblin:\n";
         //Give evil team money
+        if(AvalonSFXConnection)
+        {
+            PlaySFX("./evil_wins.mp3");
+        }
         FinalMessage = FinalMessage + AMoneyReward(true);
     }
     else
     {
         FinalMessage = FinalMessage + ":confetti_ball::innocent::confetti_ball:***GOOD TEAM WINS!***:confetti_ball::innocent::confetti_ball:\n";
+
+        if(AvalonSFXConnection)
+        {
+            PlaySFX("./good_wins.mp3");
+        }
+
         FinalMessage = FinalMessage + AMoneyReward(false);
     }
 
@@ -1160,16 +1385,15 @@ function AMoneyReward(EvilWin)
             {
                 if(APlayers[iPlayer][1].id == BankAccounts[iAcc][0])
                 {
-                    if(BankAccounts[iAcc][0] < 12)
+                    if(BankAccounts[iAcc][1] < 12)
                     {
-                        BankAccounts[iAcc][0] = 12;
+                        BankAccounts[iAcc][1] = 12;
                         BankMessage = BankMessage + APlayers[iPlayer][1].displayName + " has been reimbursed and now has 12$ in their account.:dollar:\n";
                     }
                 }
             }
         }
     }
-
     SaveAccounts();
     return BankMessage;
 }
@@ -1252,7 +1476,7 @@ const MINDSTATE =
     NEXTLEVEL:'next level'
 }
 
-const LifePreset = [0,0,]
+const LevelPreset = ["N","Shur", "Life", "N", "Shur", "Life", "N", "Shur", "Life"];
 
 var MindChannel;
 
@@ -1485,14 +1709,29 @@ function MindPlay(msg)
     }
     if(!foundPerson)
     {
-        msg.reply("you aren't part of the game.")
+        msg.reply("you aren't part of the game.");
+        return;
     }
 
+    if(MLives <= 0)
+    {
+        MindChannel(":skull:The game is over.:skull:\nYou reached level " + MLevel);
+        BotStatus = STATUS.READY;//end game
+    }
 
     //check for round end
+    for(var iPlayer = 0; iPlayer < MPlayers.length; iPlayer++)
+    {
+        if(MPlayers[iPlayer][2].length != 0)
+        {
+            return;
+        }
+    }
 
-
+    //round has ended.
+    EndRound();
 }
+
 
 function PlayCard(Card, Pidx)
 {
@@ -1503,7 +1742,6 @@ function PlayCard(Card, Pidx)
     {
         for(var iCard = 0; iCard < MPlayers[iPlayer][2].length; iCard++)
         {
-            console.log("Looking at " + MPlayers[iPlayer][1].displayName + " : considering " + MPlayers[iPlayer][2][iCard] +" vs " + Card);
             if(MPlayers[iPlayer][2][iCard] < Card)
             {
                 LifeLost = true;
@@ -1532,6 +1770,28 @@ function RemoveCardFromHand(Card, Pidx)
         MindChannel.send("FATAL ERROR!:skull:");
         BotStatus = STATUS.READY;
     }
+}
+
+function EndRound()
+{
+    var EndMessage = "====================\nThe round is over.\n====================\n";
+    if(MLevel < LevelPreset.length)
+    {
+        switch(LevelPreset[MLevel])
+        {
+            case "Life":
+                EndMessage = EndMessage + "You gained a life:heart:\n";
+                MLives++;
+                break;
+            case "Shur":
+                MShuriken++;
+                EndMessage = EndMessage + "You gained a shuriken:heart:\n";
+                break;
+        }
+    }
+    MState = MINDSTATE.NEXTLEVEL;
+    MindChannel.send(EndMessage);
+    DealHand();
 }
 
 ///
@@ -1627,7 +1887,7 @@ function WriteHS(PlayerIndex, name)
     
     try 
     {
-        const data = fs.writeFileSync(config.botPath + 'SlotHS.txt', HS[0] + " " + HS[1]);
+        const data = fs.writeFileSync('./SlotHS.txt', HS[0] + " " + HS[1]);
         //file written successfully
     } 
     catch (err)
@@ -1641,7 +1901,7 @@ function GetSlotHS()
 {
     try 
     {
-        const data = fs.readFileSync(config.botPath + 'SlotHS.txt', 'utf8');
+        const data = fs.readFileSync('./SlotHS.txt', 'utf8');
         var HSData = data.split(" ");
         HSData[1] = Number(HSData[1]);
     } 
