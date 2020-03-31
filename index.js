@@ -2,6 +2,8 @@ const DISCORD = require('discord.js');
 const config =  require('./config.json');
 const fs = require('fs'); 
 const BOT = new DISCORD.Client;
+const FETCH = require('node-fetch');
+
 
 const STATUS = {
     MIND : 'The Mind',
@@ -28,13 +30,17 @@ BOT.on("message", msg =>{
     switch(args[0])
     {
         case "help":
-            if(args[1] === "avalon")
+            if(args[1] == "avalon")
             {
                 msg.channel.send(config.avalonHelp);
             }
             else if(args[1] == "slots")
             {
                 msg.channel.send(config.slotsHelp);
+            }
+            else if(args[1] == "mind")
+            {
+                msg.channel.send(config.mindHelp);
             }
             else 
             {
@@ -92,6 +98,10 @@ BOT.on("message", msg =>{
             break;
         case "account":
             ShowBalance(msg);
+            break;
+        case "word":
+            var mystr = SayJson();
+            msg.channel.send(mystr);
             break;
         case "ding":
             msg.reply("URCH");
@@ -174,6 +184,9 @@ BOT.on("message", msg =>{
             case "play":
                 MindPlay(msg);
                 break;
+            case "shuriken":
+                MindShuriken(msg);
+                break;
                 
         }
     }
@@ -182,6 +195,19 @@ BOT.on("message", msg =>{
 })
 
 BOT.login(config.token);
+
+///
+///Words
+///
+
+async function SayJson()
+{
+    let url = "https://jsonplaceholder.typicode.com/posts/1";
+    let settings = { method: "Get" };
+    var response = await FETCH(url);
+    var json = await response.json();
+    return json.title;
+}
 
 ///
 ///Dipsoc bank accounts
@@ -400,7 +426,7 @@ function JoinAvalon(msg)
         return;
     }
 
-    if(AState = AVALONSTATE.JOIN)
+    if(AState == AVALONSTATE.JOIN)
     {
         if(APlayers.length >= 10)
         {
@@ -459,7 +485,7 @@ function DeclareRoles(msg)
         return;
     }
 
-    if(AState = AVALONSTATE.JOIN)
+    if(AState == AVALONSTATE.JOIN)
     {
         var noSpace = msg.content.replace(/\s+/g, " ");
         var args = noSpace.substring(config.prefix.length).split(" ");
@@ -627,27 +653,7 @@ function StartAvalon(msg)//now that everyone has joined and evil are declared, t
         }
     }
 
-    //Determine assassin
-    var AssassinPriority = [AVALONROLES.ASSASSIN, AVALONROLES.MORGANA, AVALONROLES.BLANCELOT, AVALONROLES.NEVIL, AVALONROLES.MORDRED, AVALONROLES.OBERON];
-    AAssassinIndex = -1;
-    var PriorityIdx = 0;
-    while(AAssassinIndex === -1)
-    {
-        for(var i = 0; i < APlayers.length; i++)
-        {
-            if(APlayers[i][2] === AssassinPriority[PriorityIdx])
-            {
-                AAssassinIndex = i;
-            }
-        }
-        PriorityIdx++;
-        if(PriorityIdx >= AssassinPriority.length)
-        {
-            msg.channel.send("Error! Could not find assassin. Ending game...");
-            BotStatus = STATUS.READY;
-            return;
-        }
-    }
+   
 
     var JefferyNumber = 0;
 
@@ -773,6 +779,29 @@ function StartAvalon(msg)//now that everyone has joined and evil are declared, t
 
     shuffle(APlayers);
     
+
+     //Determine assassin
+     var AssassinPriority = [AVALONROLES.ASSASSIN, AVALONROLES.MORGANA, AVALONROLES.BLANCELOT, AVALONROLES.NEVIL, AVALONROLES.MORDRED, AVALONROLES.OBERON];
+     AAssassinIndex = -1;
+     var PriorityIdx = 0;
+     while(AAssassinIndex === -1)
+     {
+         for(var i = 0; i < APlayers.length; i++)
+         {
+             if(APlayers[i][2] === AssassinPriority[PriorityIdx])
+             {
+                 AAssassinIndex = i;
+             }
+         }
+         PriorityIdx++;
+         if(PriorityIdx >= AssassinPriority.length)
+         {
+             msg.channel.send("Error! Could not find assassin. Ending game...");
+             BotStatus = STATUS.READY;
+             return;
+         }
+     }
+
     AKingStage = 1;
     AKingIndex = Math.floor(Math.random() * APlayers.length);
     ALadyIndex = mod((AKingIndex - 1),APlayers.length);
@@ -830,16 +859,19 @@ function BreifKing()
 
 function MissionAvalon(msg)
 {
+
     if(msg.channel !== AvalonChannel)
     {
         msg.reply("please say that in the channel where the game is being played.");
         return;
     }
+
     if(AState != AVALONSTATE.KING)
     {
         msg.reply("there's a time and place for everything. But not now!");
         return;
     }
+
     if(msg.author.id !== APlayers[AKingIndex][1].id)
     {
         msg.reply("only the king may decree a mission.");
@@ -1511,7 +1543,7 @@ function JoinMind(msg)
         return;
     }
 
-    if(MState = MINDSTATE.JOIN)
+    if(MState == MINDSTATE.JOIN)
     {
         if(MPlayers.length >= 100)
         {
@@ -1519,7 +1551,7 @@ function JoinMind(msg)
         }
         if(!ArrSearch(MPlayers, msg.author.id))
         {
-            MPlayers.push([msg.author.id, msg.member,[]]);
+            MPlayers.push([msg.author.id, msg.member,[],'']);
             MindChannel.send(msg.member.displayName + " has joined the game.");
         }
         else
@@ -1566,12 +1598,7 @@ function StartMind(msg)
     MLevel = 1;
     MShuriken = 1;
     MLives = Math.floor(Math.log2(3*(MPlayers.length - 1))) + 1;
-    MVotes = [];
-
-    for(var i = 0; i < MPlayers.length; i++)
-    {
-        MVotes.push(0);
-    }
+    ResetMVotes();
 
     MState = MINDSTATE.NEXTLEVEL;
     DealHand();
@@ -1592,15 +1619,31 @@ function DealHand()
         {
             MPlayers[i][2].push(deck.pop());
         }
-        MPlayers[i][2].sort();
-        MPlayers[i][1].send("Your hand is:" + MPlayers[i][2].toString());
+        MPlayers[i][2].sort(function(a, b){return a-b});
+        MPlayers[i][1].send(HandString(i)).then((newMessage) => {SaveMessage(newMessage)});;
     }
 
     //breif people.
 
-    var Breif = "\n===============================\nThe round will begin soon.\nYou have " + MLives + " HP:heart:\nYou have " + MShuriken + " shurikens left.:knife:\n*Check your cards then type !ready when you are ready.*";
+    var Breif = "\n====================\nLevel " + MLevel + " will begin soon.\nYou have " + MLives + " HP:heart:\nYou have " + MShuriken + " shurikens left.:knife:\n*Check your cards then type !ready when you are ready.*";
     MindChannel.send(Breif);
     MState = MINDSTATE.START;
+}
+
+function SaveMessage(msg)
+{
+    for(var i = 0; i < MPlayers.length; i++)
+    {
+        if(msg.channel.recipient.id == MPlayers[i][1].id)
+        {
+            MPlayers[i][3] = msg;
+        }
+    }
+}
+
+function HandString(Pidx)
+{
+    return "The mind level "+ MLevel + "\n====================\nYour hand is:" + MPlayers[Pidx][2].toString()
 }
 
 function MindReady(msg)
@@ -1640,11 +1683,7 @@ function MindReady(msg)
         }
     }
 
-    MVotes = [];
-    for(var i = 0; i < MPlayers.length; i++)
-    {
-        MVotes.push(0);
-    }
+    ResetMVotes();
     //game must start
     MindChannel.send("The game has begun. Type !play to play a card. e.g. !play 56");
     MState = MINDSTATE.PLAY;
@@ -1664,6 +1703,8 @@ function MindPlay(msg)
         return;
     }
 
+    ResetMVotes();
+
     var noSpace = msg.content.replace(/\s+/g, " ");
     let args = noSpace.substring(config.prefix.length).split(" ");
     if(isNaN(args[1]))
@@ -1682,19 +1723,19 @@ function MindPlay(msg)
             if(MPlayers[i][2].includes(CardNo))
             {
                 PlayCard(CardNo, i);
-                MindChannel.send(MPlayers[i][1].displayName + " played " + CardNo);
+                MindChannel.send(MPlayers[i][1].displayName + " played " + CardNo + ". They now have " + (MPlayers[i][2].length) + " cards remaining.");
             }
             else
             {
-                if(MCheats < 3)
+                if(MCheats < 4)
                 {
                     msg.reply("you don't have that card. Stop forcing me to give away information:angry:. I now consider you less psychic.");
                 }
-                else if(MCheats < 5)
+                else if(MCheats < 6)
                 {
-                    msg.reply("you don't have that card!! Stop doing this!:rage::rage::rage:\n");
+                    msg.reply("you don't have that card!! Stop doing this!!!:rage::rage::rage:\n");
                 }
-                else if(MCheats < 7)
+                else if(MCheats < 8)
                 {
                     msg.reply("YOU DONT HAVE THAT CARD! I AM VERY ANGRY RIGHT NOW.");
                 }
@@ -1715,10 +1756,15 @@ function MindPlay(msg)
 
     if(MLives <= 0)
     {
-        MindChannel(":skull:The game is over.:skull:\nYou reached level " + MLevel);
+        MindChannel.send(":skull:The game is over.:skull:\nYou reached level " + MLevel);
         BotStatus = STATUS.READY;//end game
     }
 
+    CheckRoundEnd();
+}
+
+function CheckRoundEnd()
+{
     //check for round end
     for(var iPlayer = 0; iPlayer < MPlayers.length; iPlayer++)
     {
@@ -1728,6 +1774,7 @@ function MindPlay(msg)
         }
     }
 
+    MLevel++;
     //round has ended.
     EndRound();
 }
@@ -1736,7 +1783,7 @@ function MindPlay(msg)
 function PlayCard(Card, Pidx)
 {
     RemoveCardFromHand(Card, Pidx);
-
+    MPlayers[Pidx][3].edit(HandString(Pidx));
     var LifeLost = false;
     for(var iPlayer = 0; iPlayer < MPlayers.length; iPlayer++)
     {
@@ -1745,8 +1792,9 @@ function PlayCard(Card, Pidx)
             if(MPlayers[iPlayer][2][iCard] < Card)
             {
                 LifeLost = true;
-                MindChannel.send(":x:" + MPlayers[iPlayer][1].displayName + " had a lower card:" + MPlayers[iPlayer][2][iCard]);
                 MPlayers[iPlayer][2].splice(iCard, 1);
+                MPlayers[iPlayer][3].edit(HandString(iPlayer));
+                MindChannel.send(":x:" + MPlayers[iPlayer][1].displayName + " had a lower card:" + MPlayers[iPlayer][2][iCard] + ". They now have " + (MPlayers[iPlayer][2].length) + " cards remaining.");
                 iCard--;
             }
         }
@@ -1785,13 +1833,95 @@ function EndRound()
                 break;
             case "Shur":
                 MShuriken++;
-                EndMessage = EndMessage + "You gained a shuriken:heart:\n";
+                EndMessage = EndMessage + "You gained a shuriken:knife:\n";
                 break;
         }
     }
     MState = MINDSTATE.NEXTLEVEL;
     MindChannel.send(EndMessage);
     DealHand();
+}
+
+function MindShuriken(msg)
+{
+    if(MState != MINDSTATE.PLAY)
+    {
+        msg.reply("there's a time and place for everything. But not now!");
+        return;
+    }
+    
+    if(msg.channel != MindChannel)
+    {
+        msg.reply("please say that in the channel where the game is being played.");
+        return;
+    }
+
+    if(MShuriken <= 0)
+    {
+        msg.reply("no shurikens are left.");
+        return;
+    }
+
+    var personIndex = -1;
+    for(var i = 0; i < MPlayers.length;i++)
+    {
+        if(MPlayers[i][1].id == msg.author.id)
+        {
+            personIndex = i;
+        }
+    }
+
+    if(personIndex == -1)
+    {
+        msg.reply("you aren't playing the game.");
+    }
+
+    MVotes[personIndex] = 1;
+    var ShurMessage = MPlayers[personIndex][1].displayName + " voted to play a shuriken.\n";
+    for(var i = 0; i < MVotes.length; i++)
+    {
+        if(MVotes[i] == 0)
+        {
+            MindChannel.send(ShurMessage);
+            return;
+        }
+    }
+
+    //shuriken is played
+    ShurMessage = ShurMessage + "You have all agreed to play a Shuriken:knife:.\n";
+
+    for(var i = 0; i < MPlayers.length;i++)
+    {
+        var SmallestCard = [0, 1000];
+        for(var j = 0; j < MPlayers[i][2].length; j++)
+        {
+            if(MPlayers[i][2][j] < SmallestCard[1])
+            {
+                SmallestCard = [j, MPlayers[i][2][j]];
+            }
+
+        }
+        if(SmallestCard[1] != 1000)
+        {
+            RemoveCardFromHand(SmallestCard[1], i);
+            ShurMessage = ShurMessage + MPlayers[i][1].displayName + "'s lowest card was " + SmallestCard[1] + ".\n";
+        }
+    }
+
+    MShuriken--;
+    MindChannel.send(ShurMessage);
+    ResetMVotes();
+
+    CheckRoundEnd();
+}
+
+function ResetMVotes()
+{
+    MVotes = [];
+    for(var i = 0; i < MPlayers.length; i++)
+    {
+        MVotes.push(0);
+    }
 }
 
 ///
@@ -1867,7 +1997,7 @@ function PullSlot(msg)
 
     if(Gain > 5)
     {
-        ClearDebts();
+        ClearDebts(msg);
         SlotBreif = SlotBreif + ":game_die::black_joker::dollar: To celebrate this big win, all accounts have been bumped up to 10$.";
     }
 
@@ -1913,7 +2043,7 @@ function GetSlotHS()
     return HSData;
 }
 
-function ClearDebts()
+function ClearDebts(msg)
 {
     for(var i = 0; i < BankAccounts.length;i++)
     {
@@ -1922,7 +2052,7 @@ function ClearDebts()
             BankAccounts[i][1] = 10;
         }
     }
-    BotChannel.send(":game_die::black_joker::dollar: All slot machine debts have been cleared.");
+    msg.channel.send(":game_die::black_joker::dollar: All slot machine debts have been cleared.");
 }
 
 ///
