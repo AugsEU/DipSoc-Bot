@@ -1,8 +1,9 @@
 const DISCORD = require('discord.js');
 const config =  require('./config.json');
 const fs = require('fs'); 
+const Wordnik_API = require('./wordnik.js'); 
 const BOT = new DISCORD.Client;
-const FETCH = require('node-fetch');
+
 
 
 const STATUS = {
@@ -100,11 +101,19 @@ BOT.on("message", msg =>{
             ShowBalance(msg);
             break;
         case "word":
-            var mystr = SayJson();
-            msg.channel.send(mystr);
+            WordCommand(msg);
             break;
         case "ding":
             msg.reply("URCH");
+            break;
+        case "roll":
+            var MaxVal = 10;
+            if(!isNaN(args[1]))
+            {
+                var MaxVal = Number(args[1]);
+            }
+            var Num = Math.ceil(Math.random()*MaxVal);
+            msg.reply("Rolling from 1 to " + MaxVal + "...\nYou rolled a " + Num);
             break;
     }
 
@@ -200,13 +209,59 @@ BOT.login(config.token);
 ///Words
 ///
 
-async function SayJson()
+function WordCommand(msg)
 {
-    let url = "https://jsonplaceholder.typicode.com/posts/1";
-    let settings = { method: "Get" };
-    var response = await FETCH(url);
-    var json = await response.json();
-    return json.title;
+    var noSpace = msg.content.replace(/\s+/g, " ");
+    var args = noSpace.substring(config.prefix.length).split(" ");
+    if(typeof(args[1]) =="undefined")
+    {
+        SayWordOfDay(msg.channel);
+        return;
+    }
+
+    switch(args[1].toLowerCase())
+    {
+        case "oftheday":
+            SayWordOfDay(msg.channel);
+            break;
+        case "define":
+            DefineWord(args[2],msg.channel)
+            break;
+    }
+}
+
+async function DefineWord(wordStr, channel)
+{
+    var Definitions = await Wordnik_API.GetDefinitions(wordStr);
+    for(var i = 0; i < Definitions.length; i++)
+    {
+        if(typeof(Definitions[i].text) !== "undefined")
+        {
+            channel.send(PresentWord({"word":wordStr},Definitions[i]));
+            return;
+        }
+    }
+    channel.send("Could not define " + wordStr);
+}
+
+async function SayWordOfDay(channel)
+{
+    var WordOfDay = await Wordnik_API.GetWordOfDay();
+    channel.send(PresentWord(WordOfDay, WordOfDay.definitions[0]));
+}
+
+function PresentWord(word, definition)
+{
+    const WordEmbed = new DISCORD.MessageEmbed()
+        .setColor('#808065')
+	    .setTitle(word.word)
+	    .setAuthor('Dipsoc bot teaches words', 'https://i.imgur.com/1Ng6L1l.png')
+        .setDescription("*" + definition.partOfSpeech + ".* " + definition.text);
+    
+    if(typeof(word.note) != "undefined")
+        WordEmbed.setFooter('Fun fact: ' + word.note);
+
+    return WordEmbed;
 }
 
 ///
@@ -1792,9 +1847,10 @@ function PlayCard(Card, Pidx)
             if(MPlayers[iPlayer][2][iCard] < Card)
             {
                 LifeLost = true;
+                MindChannel.send(":x:" + MPlayers[iPlayer][1].displayName + " had a lower card:" + MPlayers[iPlayer][2][iCard] + ". They now have " + (MPlayers[iPlayer][2].length - 1) + " cards remaining.");
                 MPlayers[iPlayer][2].splice(iCard, 1);
                 MPlayers[iPlayer][3].edit(HandString(iPlayer));
-                MindChannel.send(":x:" + MPlayers[iPlayer][1].displayName + " had a lower card:" + MPlayers[iPlayer][2][iCard] + ". They now have " + (MPlayers[iPlayer][2].length) + " cards remaining.");
+                
                 iCard--;
             }
         }
