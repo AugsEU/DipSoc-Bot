@@ -1,7 +1,9 @@
+const fs = require('fs');
+const Wordnik_API = require('./wordnik.js'); 
+const COUNTDOWN = require('./countdown.js'); 
 const DISCORD = require('discord.js');
 const config =  require('./config.json');
-const fs = require('fs'); 
-const Wordnik_API = require('./wordnik.js'); 
+
 const BOT = new DISCORD.Client;
 
 
@@ -9,6 +11,7 @@ const BOT = new DISCORD.Client;
 const STATUS = {
     MIND : 'The Mind',
     AVALON: 'Avalon',
+    COUNTDOWN: 'Countdown',
     READY: 'ready'
 }
 
@@ -21,12 +24,40 @@ BOT.on("ready", () =>{
     console.log("Bot is online.");
 })
 
+
 BOT.on("message", msg =>{
+
     if(msg.author.bot) return;//ignore any bots(including this one)
     if(msg.content.indexOf(config.prefix) !== 0) return;
 
     var noSpace = msg.content.replace(/\s+/g, " ");
     let args = noSpace.substring(config.prefix.length).split(" ");
+
+    if(BotStatus === STATUS.COUNTDOWN)
+    {
+        switch(args[0])
+        {
+            case "stopcountdown":
+                msg.channel.send("Stopping countdown...");
+                BotStatus = STATUS.READY;
+                try
+                {
+                    clearInterval(CDUpdater);
+
+                    return;
+                }
+                catch(err)
+                {
+                    console.error(err);
+                    CloseBot();
+                }
+                break;
+        }
+        
+        CDWord(msg, args[0]);
+        return;
+    }
+    
 
     switch(args[0])
     {
@@ -42,6 +73,10 @@ BOT.on("message", msg =>{
             else if(args[1] == "mind")
             {
                 msg.channel.send(config.mindHelp);
+            }
+            else if(args[1] == "countdown")
+            {
+                msg.channel.send(config.countdownHelp);
             }
             else 
             {
@@ -93,9 +128,20 @@ BOT.on("message", msg =>{
                 msg.channel.send("Current slots highscore is:\n" + HS[1] +"$ by " + HS[0]);
             }
             break;
+        case "countdown":
+            if(BotStatus === STATUS.READY)
+            {
+                BotStatus = STATUS.COUNTDOWN;
+                InitCountdown(msg.channel, args);
+            }
+            else
+            {
+                msg.channel.send("Bot is currently doing something else! Can't start a game of the mind.");
+            }
+            break;
         case "here":
-            BotChannel = msg.channel;
-            BotChannel.send("Default bot channel is #" + BotChannel.name);
+            //BotChannel = msg.channel;
+            //BotChannel.send("Default bot channel is #" + BotChannel.name);
             break;
         case "account":
             ShowBalance(msg);
@@ -200,10 +246,10 @@ BOT.on("message", msg =>{
         }
     }
 
-
 })
 
 BOT.login(config.token);
+
 
 ///
 ///Words
@@ -333,6 +379,181 @@ function ShowBalance(msg)
     msg.reply(ReplyMsg);
 }
 
+///
+/// Countdown
+///
+
+const Vowels = ["a","a","a","a","a","a","a","a","a","a","a","a","a","a", "e","e","e","e","e","e","e","e","e","e","e","e","e","e","e","e","e","e","e", "i", "i", "i", "i", "i", "i", "i", "i", "i", "i", "i", "i",  "o","o","o","o","o","o","o","o","o","o","o","o", "u", "u", "u", "u", "u"];
+const Consonants = ["b","b","c","c","c","d","d","d","d","d","f","f","g","g","g","h","h","j","k","l","l","l","l","m","m","m","n","n","n","n","n","n","p","p","p","p","q","r","r","r","r","r","r","r","s","s","s","s","s","s","t","t","t","t","t","t","t","v","w","x","x","y","z"];
+
+
+var CountdownChannel;
+var CountdownMsg;
+var CountdownLetters;
+var CDTimeLeft;
+var CDUpdater;
+var BestWord;
+
+async function InitCountdown(channel, settings)
+{
+    CountdownLetters = [];
+    CountdownChannel = channel;
+    var VowelNo = 4;
+    CDTimeLeft = 30;//30 seconds.
+    BestWord = ['',''];//Format: USER, WORD
+
+    if(typeof(settings[1]) != "undefined" && !isNaN(settings[1]))
+    {
+        CDTimeLeft = Math.floor(Math.max(5,Number(settings[1])));
+    }
+    if(typeof(settings[2]) != "undefined" && !isNaN(settings[2]))
+    {
+        VowelNo = Math.floor(Math.max(0,Number(settings[2])));
+    }
+
+    for(var i = 0; i < 9; i++)//add letters
+    {
+        if(i < VowelNo)//add vowel
+        {
+            var VIndex = Math.floor(Math.random()*Vowels.length);
+            CountdownLetters.push(Vowels[VIndex]);
+        }
+        else
+        {
+            var CIndex = Math.floor(Math.random()*Consonants.length);
+            CountdownLetters.push(Consonants[CIndex]);
+        }
+    }
+    shuffle(CountdownLetters);
+    CountdownMsg = await CountdownChannel.send(CDMessage());
+    CDUpdater = setInterval(UpdateTime, 5000);
+}
+
+function UpdateTime()
+{
+    CDTimeLeft -= 5;
+    CDTimeLeft = Math.max(CDTimeLeft, 0);
+    CountdownMsg.edit(CDMessage());
+    if(CDTimeLeft <= 0)
+    {
+        clearInterval(CDUpdater);//stop updating this
+        CDEndGame();
+    }
+}
+
+function CDMessage()
+{
+    var ReturnMsg = "A game of countdown :clock: is starting in #" + CountdownChannel.name + ".\nYou have " + CDTimeLeft + " seconds.\nThe letters are:";
+    
+    for(var i = 0; i < CountdownLetters.length; i++)
+    {
+        ReturnMsg = ReturnMsg + LetterToEmoji(CountdownLetters[i].toLowerCase()) + " ";
+    }
+    return ReturnMsg;
+}
+
+function CDWord(msg, word)
+{
+    var word = word.toLowerCase();
+    if(msg.channel != CountdownChannel && !(msg.channel instanceof DISCORD.DMChannel))
+    {
+        
+        msg.reply("Please say that in either DMs or the game where countdown is being played.");
+        return;
+    }
+
+    var PotentialLetters = CountdownLetters.slice();
+    
+    for (var i = 0; i < word.length; i++) //check if word uses valid letters.
+    {
+        var MyChar = word.charAt(i);
+        if(!PotentialLetters.includes(MyChar))
+        {
+            msg.reply("That word doesn't use the right letters.");
+            return;
+        }
+        var LetterIdx = PotentialLetters.indexOf(MyChar);
+        PotentialLetters.splice(LetterIdx,1);//remove letter from pool.
+    }
+    
+    if(word.length < BestWord[1].length)//check if it's the new best
+    {
+        msg.reply("someone has already found a better word.");
+        return;
+    }
+    else if(word.length == BestWord[1].length)
+    {
+        msg.reply("someone has found an equally long word.");
+        return;
+    }
+    
+    if(!COUNTDOWN.word_in_dictionary(word))
+    {
+        msg.reply("could not find word in dictionary");
+        return;
+    }
+    
+    //Make word new best
+    BestWord[0] = msg.member;
+    BestWord[1] = word;
+    msg.reply("that word is the new best word.");
+}
+
+function CDEndGame()
+{
+    var CDMessage = "The game of countdown is over.\n";
+    if(BestWord[1] == '')
+    {
+        CDMessage = CDMessage + "Nobody found a word in time.";
+    }
+    else
+    {
+        CDMessage = CDMessage + ":confetti_ball:" + BestWord[0].displayName + " won the game with the word \"" + BestWord[1] + "\".:confetti_ball:";
+        if(BestWord[1].length > 6)
+        {
+            CDMessage = CDMessage + CDMoneyReward(BestWord[0]);
+        }
+    }
+
+    var result = [];
+    
+    COUNTDOWN.solve_letters(CountdownLetters.join(""), function(word, c) { result.push([word, c]); });
+
+    result.sort(function(a, b) {
+        if (b[0].length != a[0].length)
+            return b[0].length - a[0].length;
+        else
+            return b[1] - a[1];
+    });
+
+    var BestWordStr = "";
+    for(var i = 0; i < result[0][0].length; i++)
+    {
+        BestWordStr = BestWordStr + LetterToEmoji(result[0][0].charAt(i));
+    }
+    
+    CountdownChannel.send(CDMessage + "\nExample of best word: " + BestWordStr);
+    BotStatus = STATUS.READY;
+}
+
+function CDMoneyReward(winner)
+{
+    var BankMessage = "";
+    for(var iAcc = 0; iAcc < BankAccounts.length; iAcc++)
+    {
+        if(winner.id == BankAccounts[iAcc][0])
+        {
+            if(BankAccounts[iAcc][1] < 8)
+            {
+                BankAccounts[iAcc][1] = 8;
+                BankMessage = "\n" + BankMessage + winner.displayName + " has been reimbursed and now has 8$ in their account.:dollar:";
+            }
+        }
+    }
+
+    SaveAccounts();
+    return BankMessage;
+}
 
 ///
 ///Avalon
@@ -2193,4 +2414,9 @@ function DigitToEmoji(d)
 function hasDuplicates(array) 
 {
     return (new Set(array)).size !== array.length;
+}
+
+function LetterToEmoji(Letter)
+{
+    return ":regional_indicator_" + Letter + ":";
 }

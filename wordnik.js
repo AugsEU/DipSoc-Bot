@@ -58,7 +58,22 @@ module.exports.GetWordOfDay = async function ()
 
 module.exports.GetDefinitions = async function(wordStr, limit = 5, includeRelated = false, useCanonical = true, includeTags = false)
 {
-    var settings = "limit=" + limit + "&includeRelated" + includeRelated + "&useCanonical=" + useCanonical + "&includeTags" + includeTags + "&";
+    var settings = "limit=" + limit + "&includeRelated=" + includeRelated + "&useCanonical=" + useCanonical + "&includeTags=" + includeTags + "&";
     var Definitions = await QueryWordNik("word.json/" + wordStr + "/definitions",settings);
     return Definitions;
+}
+
+module.exports.GetRandWord = async function(dictDef = true, incPartOfSpeech = "", excPartOfSpeech = "", minFreq = 0, maxFreq = -1, minDictionaryCount = 1, maxDictionaryCount = -1, minLength = 0, maxLength = -1)
+{
+    var settings = "hasDictionaryDef=" + dictDef + "&minCorpusCount=" + minFreq + "&maxCorpusCount=" + maxFreq + "&minDictionaryCount=" + minDictionaryCount + "&maxDictionaryCount=" + maxDictionaryCount + "&minLength=" + minLength + "&maxLength=" + maxLength + "&";
+    if(incPartOfSpeech != "")
+    {
+        settings = "includePartOfSpeech=" + incPartOfSpeech + "&";
+    }
+    if(excPartOfSpeech != "")
+    {
+        settings = "excludePartOfSpeech=" + excludePartOfSpeech + "&";
+    }
+    var RandWord = await QueryWordNik("words.json/" + wordStr + "/randomWord",settings);
+    return RandWord;
 }
