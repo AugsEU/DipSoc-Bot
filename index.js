@@ -3,6 +3,7 @@ const Wordnik_API = require('./wordnik.js');
 const COUNTDOWN = require('./countdown.js'); 
 const DISCORD = require('discord.js');
 const config =  require('./config.json');
+const emojis = require('./random-emoji.js');
 
 const BOT = new DISCORD.Client;
 
@@ -12,11 +13,11 @@ const STATUS = {
     MIND : 'The Mind',
     AVALON: 'Avalon',
     COUNTDOWN: 'Countdown',
+    DECRYPTO: 'DECRYPTO',
     READY: 'ready'
 }
 
 var BotStatus = STATUS.READY;
-var BotChannel;
 var BankAccounts = [];
 
 BOT.on("ready", () =>{
@@ -116,6 +117,30 @@ BOT.on("message", msg =>{
                 msg.channel.send("Bot is currently doing something else! Can't start a game of the mind.");
             }
             break;
+        case "countdown":
+            if(BotStatus === STATUS.READY)
+            {
+                BotStatus = STATUS.COUNTDOWN;
+                InitCountdown(msg.channel, args);
+            }
+            else
+            {
+                msg.channel.send("Bot is currently doing something else! Can't start a game of countdown.");
+            }
+            break;
+        case "decrypto":
+            if(BotStatus === STATUS.READY)
+            {
+                BotStatus = STATUS.DECRYPTO;
+                msg.channel.send("A game of Decrypto :robot: is starting in #" + msg.channel.name + ". Enter !join if you want to join the game.");
+                DecryptoChannel = msg.channel;
+                InitDecrypto();
+            }
+            else
+            {
+                msg.channel.send("Bot is currently doing something else! Can't start a game of decrypto.");
+            }
+            break;
         case "slots":
             if(args[1] == "pull")
             {
@@ -128,17 +153,7 @@ BOT.on("message", msg =>{
                 msg.channel.send("Current slots highscore is:\n" + HS[1] +"$ by " + HS[0]);
             }
             break;
-        case "countdown":
-            if(BotStatus === STATUS.READY)
-            {
-                BotStatus = STATUS.COUNTDOWN;
-                InitCountdown(msg.channel, args);
-            }
-            else
-            {
-                msg.channel.send("Bot is currently doing something else! Can't start a game of the mind.");
-            }
-            break;
+
         case "here":
             //BotChannel = msg.channel;
             //BotChannel.send("Default bot channel is #" + BotChannel.name);
@@ -163,87 +178,112 @@ BOT.on("message", msg =>{
             break;
     }
 
-    if(BotStatus == STATUS.AVALON)
+    switch(BotStatus)
     {
-        switch(args[0])
-        {
-            case "stopavalon":
-                msg.channel.send("Someone flips over a card and the game is ruined! Stopping Avalon....");
-                BotStatus = STATUS.READY;
-                break;
-            case "join":
-                JoinAvalon(msg);
-                break;
-            case "who":
-                WhoAvalon(msg);
-                break;
-            case "roles":
-                DeclareRoles(msg);
-                break;
-            case "start":
-                StartAvalon(msg);
-                break;
-            case "mission":
-                MissionAvalon(msg);
-                break;
-            case "approve":
-                AvalonVote(args[0], msg);
-                break;
-            case "accept":
-                AvalonVote("approve", msg);
-                break;
-            case "reject":
-                AvalonVote(args[0], msg);
-                break;
-            case "success":
-                AvalonMissionVote(args[0], msg);
-                break;
-            case "fail":
-                AvalonMissionVote(args[0], msg);
-                break;
-            case "lady":
-                LadyAvalon(msg);
-                break;
-            case "assassinate":
-                AssassinateAvalon(msg);
-                break;
-            case "prevmissions":
-                PreviousAvalon(msg);
-                break;
-            case "sfx":
-                AvalonSfx(msg);
-                break;
-            
-        }
-    }
-    else if(BotStatus === STATUS.MIND)
-    {
-        switch(args[0])
-        {
-            case "stopmind":
-                msg.channel.send("Stopping \"The Mind\"...");
-                BotStatus = STATUS.READY;
-                break;
-            case "join":
-                JoinMind(msg);
-                break;
-            case "who":
-                WhoMind(msg);
-                break;
-            case "start":
-                StartMind(msg);
-                break;
-            case "ready":
-                MindReady(msg);
-                break;
-            case "play":
-                MindPlay(msg);
-                break;
-            case "shuriken":
-                MindShuriken(msg);
-                break;
+        case STATUS.AVALON:
+            switch(args[0])
+            {
+                case "stopavalon":
+                    msg.channel.send("Someone flips over a card and the game is ruined! Stopping Avalon....");
+                    BotStatus = STATUS.READY;
+                    break;
+                case "join":
+                    JoinAvalon(msg);
+                    break;
+                case "who":
+                    WhoAvalon(msg);
+                    break;
+                case "roles":
+                    DeclareRoles(msg);
+                    break;
+                case "start":
+                    StartAvalon(msg);
+                    break;
+                case "mission":
+                    MissionAvalon(msg);
+                    break;
+                case "approve":
+                    AvalonVote(args[0], msg);
+                    break;
+                case "accept":
+                    AvalonVote("approve", msg);
+                    break;
+                case "reject":
+                    AvalonVote(args[0], msg);
+                    break;
+                case "success":
+                    AvalonMissionVote(args[0], msg);
+                    break;
+                case "fail":
+                    AvalonMissionVote(args[0], msg);
+                    break;
+                case "lady":
+                    LadyAvalon(msg);
+                    break;
+                case "assassinate":
+                    AssassinateAvalon(msg);
+                    break;
+                case "prevmissions":
+                    PreviousAvalon(msg);
+                    break;
+                case "sfx":
+                    AvalonSfx(msg);
+                    break;
                 
-        }
+            }
+            break;
+        case STATUS.MIND:
+            switch(args[0])
+            {
+                case "stopmind":
+                    msg.channel.send("Stopping \"The Mind\"...");
+                    BotStatus = STATUS.READY;
+                    break;
+                case "join":
+                    JoinMind(msg);
+                    break;
+                case "who":
+                    WhoMind(msg);
+                    break;
+                case "start":
+                    StartMind(msg);
+                    break;
+                case "ready":
+                    MindReady(msg);
+                    break;
+                case "play":
+                    MindPlay(msg);
+                    break;
+                case "shuriken":
+                    MindShuriken(msg);
+                    break;
+                    
+            }
+            break;
+        case STATUS.DECRYPTO:
+            switch(args[0])
+            {
+                case "stopdecrypto":
+                    msg.channel.send("Someone knocks over their words and the game is ruined! Stopping Decrypto....");
+                    BotStatus = STATUS.READY;
+                    break;
+                case "join":
+                    JoinDecrypto(msg);
+                    break;
+                case "who":
+                    WhoDecrypto(msg);
+                    break;
+                case "start":
+                    StartDecrypto(msg);
+                    break;
+                case "clue":
+                    DecryptoClue(msg);
+                    break;
+                case "guess":
+                    DecryptoGuess(msg);
+                    break;
+            }
+            break;
     }
 
 })
@@ -283,6 +323,7 @@ async function DefineWord(wordStr, channel)
     {
         if(typeof(Definitions[i].text) !== "undefined")
         {
+            
             channel.send(PresentWord({"word":wordStr},Definitions[i]));
             return;
         }
@@ -298,11 +339,12 @@ async function SayWordOfDay(channel)
 
 function PresentWord(word, definition)
 {
+    var DefText = definition.text.replace(/<\/?[^>]+(>|$)/g, "");
     const WordEmbed = new DISCORD.MessageEmbed()
         .setColor('#808065')
 	    .setTitle(word.word)
 	    .setAuthor('Dipsoc bot teaches words', 'https://i.imgur.com/1Ng6L1l.png')
-        .setDescription("*" + definition.partOfSpeech + ".* " + definition.text);
+        .setDescription("*" + definition.partOfSpeech + ".* " + DefText);
     
     if(typeof(word.note) != "undefined")
         WordEmbed.setFooter('Fun fact: ' + word.note);
@@ -380,6 +422,572 @@ function ShowBalance(msg)
 }
 
 ///
+///Decrypto
+///
+
+const DECRYPTOSTATE = 
+{
+    JOIN: 'join',
+    GAME_READY: 'gameready',
+    CLUE: 'clue',
+    GUESS_ENEMY: 'guess enemy',
+    GUESS_OWN: 'guess own'
+}
+
+var DecryptoChannel;
+
+var DState;
+var DPlayers;
+var DCluers;
+var DWords;
+var DTeamSymbols;
+var DSequences;
+var DClues;
+var DRound;
+var DVotes;
+var DPoints;
+var DEnemyGuesses;
+var DPreviousClues;
+
+function InitDecrypto()
+{
+    DState = DECRYPTOSTATE.JOIN;
+    DPlayers = [];
+    DCluers = [0,0];
+    DWords = [['','','',''],['','','','']]//each team's words
+    DTeamSymbols = ['',''];
+    DSequences = [[],[]];
+    DClues = ['',''];
+    DRound = 1;
+    DPoints = [[0,0],[0,0]]//format [Intercepts, Miscoms];
+    DEnemyGuesses = [[],[]];
+    DPreviousClues = [[[],[],[],[]],[[],[],[],[]]]//Clues[team][number]
+}
+
+function JoinDecrypto(msg)
+{
+    if(msg.channel !== DecryptoChannel)
+    {
+        msg.reply("please say that in the channel where the game is being played.");
+        return;
+    }
+
+    if(DState == DECRYPTOSTATE.JOIN)
+    {
+
+        if(!ArrSearch(DPlayers, msg.author.id))
+        {
+            DPlayers.push([msg.author.id, msg.member]);
+            DecryptoChannel.send(msg.member.displayName + " has joined the game.");
+        }
+        else
+        {
+            msg.reply("looks like you already part of the game.");
+        }
+    }
+    else
+    {
+        msg.channel.send("You can't join; the game is already in progress.");
+    }
+}
+
+function WhoDecrypto(msg)
+{
+    msg.channel.send("Players currently in the game:");
+    var PlayerList = "";
+    for (i = 0; i < DPlayers.length; i++) 
+    {
+        PlayerList =  PlayerList + " " + DPlayers[i][1].displayName + " |";
+    }
+    msg.channel.send(PlayerList);
+}
+
+function StartDecrypto(msg)
+{
+    if(msg.channel !== DecryptoChannel)
+    {
+        msg.reply("please say that in the channel where the game is being played.");
+        return;
+    }
+
+    if(DPlayers.length < 4)
+    {
+        msg.reply("can't start game! Need at least 4 players.");
+        return;
+    }
+
+    if(DState !== DECRYPTOSTATE.JOIN)
+    {
+        msg.reply("the game of decrypto has already started.");
+        return;
+    }
+    DState = DECRYPTOSTATE.GAME_READY;
+    var StartMessage = "---------\nThe game has begun\n---------\n\n";
+    
+    //decide teams
+    shuffle(DPlayers);
+    var TempPlayers = [[],[]];
+    for(var i = 0; i < DPlayers.length; i++)
+    {
+        if(i <= (DPlayers.length/2 - 1))
+        {
+            TempPlayers[0].push(DPlayers[i]);
+        }
+        else
+        {
+            TempPlayers[1].push(DPlayers[i]);
+        }
+    }
+    DPlayers = TempPlayers;
+
+    //generate team names
+    DTeamSymbols[0] = emojis.randomemoji();
+    do 
+    {
+        DTeamSymbols[1] = emojis.randomemoji();
+    }
+    while (DTeamSymbols[1] == DTeamSymbols[0]);
+    
+
+    //display teams
+    StartMessage = StartMessage + "Team " + DTeamSymbols[0] + " is :\n"
+    for(var i = 0; i < DPlayers[0].length; i++)
+    {
+        StartMessage = StartMessage + DPlayers[0][i][1].displayName + "\n";
+    }
+
+    StartMessage = StartMessage + "Team " + DTeamSymbols[1] + " is :\n"
+    for(var i = 0; i < DPlayers[1].length; i++)
+    {
+        StartMessage = StartMessage + DPlayers[1][i][1].displayName + "\n";
+    }
+
+    StartMessage = StartMessage + "\nEach team should now have their words. The two teams should go to separate voice channels.";
+    DecryptoGiveWords();
+    DecryptoChannel.send(StartMessage);
+    DState = DECRYPTOSTATE.CLUE;
+    BreifCluers();
+}
+
+async function DecryptoGiveWords()
+{
+    //generate words
+    var Words;
+    try
+    {
+        Words = fs.readFileSync('./CommonWords.txt', 'utf8');
+    }
+    catch (err)
+    {
+        console.error(err);
+        CloseBot();
+    }
+    Words = Words.split(/\r?\n/);//split by new line
+    //Set words
+    for(var t = 0; t <= 1; t++)
+    {
+        DWords[t][0] = RandEle(Words);
+        do { DWords[t][1] = RandEle(Words); }while(DWords[t][1] == DWords[t][0])
+        do { DWords[t][2] = RandEle(Words);}while(DWords[t][2] == DWords[t][0] || DWords[t][2] == DWords[t][1])
+        do { DWords[t][3] = RandEle(Words);}while(DWords[t][3] == DWords[t][0] || DWords[t][3] == DWords[t][1] || DWords[t][3] == DWords[t][2])
+    }
+
+    //Send out DMs
+    for(var t = 0; t <= 1; t++)
+    {
+        for(var p = 0; p < DPlayers[t].length;p++)
+        {
+            var WordsMessage = "========================\nYour team's words are:\n";
+            for(var w = 0; w < 4; w++)
+            {
+                WordsMessage = WordsMessage + DigitToEmoji(w+1) + DWords[t][w] + "\n";
+            }
+            WordsMessage = WordsMessage + "========================";
+            DPlayers[t][p][1].send(WordsMessage);
+        }
+    }
+
+    
+}
+
+function BreifCluers()
+{
+    //generate sequences
+    for(var t = 0; t <= 1; t++)
+    {
+        DSequences[t] = shuffle([0,1,2,3]).splice(0,3);
+        var sequenceStr = "Your sequence is:\n";
+        for(var i = 0; i < DSequences[t].length;i++)
+        {
+            sequenceStr = sequenceStr + DigitToEmoji(DSequences[t][i]+1) + " ";
+        }
+        sequenceStr = sequenceStr + "Clues must reference the meaning of the words and not the numbers.\nType !clue to give your clues, separating each with commas\nE.g. !clue Frank, Transverse, Salt";
+        DPlayers[t][DCluers[t]][1].send(sequenceStr);
+    }
+
+    var GlobalMessage = "Starting round " + DRound + "\n";
+    GlobalMessage = GlobalMessage + ShowTeamsTokens();
+    for(var t = 0; t <= 1; t++)
+    {
+        GlobalMessage = GlobalMessage + "<@!" + DPlayers[t][DCluers[t]][1].id +"> is giving clues for team " + DTeamSymbols[t] + ".\n";
+    }
+    DecryptoChannel.send(GlobalMessage);
+    DecryptoChannel.send(CreatePrevCluesEmbed(0));
+    DecryptoChannel.send(CreatePrevCluesEmbed(1));
+}
+
+function DecryptoGetMsgSender(msg)
+{
+    var CluedTeam = -1;
+    var CluerIdx = -1;
+    for(var t = 0; t <= 1; t++)
+    {
+        for(var p = 0; p < DPlayers[t].length; p++)
+        {
+            if(DPlayers[t][p][1].id == msg.author.id)
+            {
+                CluedTeam = t;
+                CluerIdx = p;
+            }
+        }
+    }
+    
+    if(CluedTeam == -1 || CluerIdx == -1)
+    {
+        msg.reply("you aren't in the game.");
+        return;
+    }
+
+    return [CluedTeam, CluerIdx];
+}
+
+function DecryptoClue(msg)
+{
+    if(msg.channel != DecryptoChannel && !(msg.channel instanceof DISCORD.DMChannel))
+    {
+        msg.reply("please say that in the channel where the game is being played or DMs.");
+        return;
+    }
+
+    if(DState != DECRYPTOSTATE.CLUE)
+    {
+        msg.reply("there's a time and place for everything. But not now!");
+        return;
+    }
+    var PlayerIdentity = DecryptoGetMsgSender(msg);
+    var CluedTeam = PlayerIdentity[0];
+    var CluerIdx = PlayerIdentity[1];
+    
+
+    if(DClues[CluedTeam] != '')
+    {
+        msg.reply("you have already given a clue");
+        return;
+    }
+
+    if(msg.content.length <= 5)
+    {
+        msg.reply("can't give an empty clue");
+        return;
+    }
+
+    if(CluerIdx != DCluers[CluedTeam])
+    {
+        msg.replace("*you* aren't supposed to be giving clues.");
+        return;
+    }
+
+    var GivenClues = msg.content.split(' ').slice(1).join(' ');
+    GivenClues = GivenClues.replace(/, /g, ",");
+    GivenClues = GivenClues.split(",");
+
+    if(GivenClues.length != 3)
+    {
+        msg.reply("error! Did you give more than 3 clues?\nTry something like !clue Frank, Transverse, Salt");
+        return;
+    }
+
+    DClues[CluedTeam] = GivenClues;
+
+    DecryptoChannel.send("Team " + DTeamSymbols[CluedTeam] + "'s clues are:" + GivenClues.toString());
+
+    for(var t = 0; t <= 1; t++)
+    {
+        if(DClues[t] == '') return; 
+    }
+    
+    //proceed to guessing
+    if(DRound == 1)//skip enemy guessing on round 1
+    {
+        DState = DECRYPTOSTATE.GUESS_OWN;
+        BreifGuessOwn();
+    }
+    else
+    {
+        DState = DECRYPTOSTATE.GUESS_ENEMY;
+        BreifGuessEnemy();
+    }
+
+}
+
+function BreifGuessEnemy()
+{
+    DVotes = [0,0];
+    DecryptoChannel.send("==========================\nIt is now time for you to guess ***the opposite team's*** sequence.\nType !guess to make a guess at the opponent's sequence\nE.G. !guess 1, 2, 4");
+    DecryptoChannel.send(CreatePrevCluesEmbed(0));
+    DecryptoChannel.send(CreatePrevCluesEmbed(1));
+}
+
+function BreifGuessOwn()
+{
+    DVotes = [0,0];
+    DecryptoChannel.send("==========================\nIt is now time for you to ***your own team's*** sequence.\nType !guess to make a guess at the sequence\nE.G. !guess 1, 2, 4");
+}
+
+function DecryptoGuess(msg)
+{
+    if(msg.channel != DecryptoChannel)
+    {
+        msg.reply("please say that in the channel where the game is being played.");
+        return;
+    }
+
+    var GuessSeq = msg.content.split(' ').slice(1).join(' ');
+    GuessSeq = GuessSeq.replace(/, /g, ",");
+    GuessSeq = GuessSeq.split(",");
+
+    if(GuessSeq.length != 3)
+    {
+        msg.reply("error! Does your sequence have 3 numbers?\nPlease try again.");
+        return;
+    }
+
+    for(var i = 0; i < GuessSeq.length; i++)
+    {
+        if(isNaN(Number(GuessSeq[i])))
+        {
+            msg.reply("error! Could not decipher numbers.\nPlease try again."); 
+            return;
+        }
+        var MyNumber = Number(GuessSeq[i]);
+        if(MyNumber > 4 || MyNumber < 1)
+        {
+            msg.reply("error! Numbers should be 1 to 4.\nPlease try again.");
+            return;
+        }
+
+        if(!Number.isInteger(MyNumber))
+        {
+            msg.reply("error! Numbers must be whole numbers.\nPlease try again.");
+            return;
+        }
+        GuessSeq[i] = MyNumber-1;
+    }
+
+    var GuessTeam = DecryptoGetMsgSender(msg)[0];
+
+    if(DState == DECRYPTOSTATE.GUESS_ENEMY)
+    {
+        DecryptoEnemyGuess(GuessTeam, GuessSeq);
+    }
+    else if(DState == DECRYPTOSTATE.GUESS_OWN)
+    {
+        DecryptoOwnGuess(GuessTeam, GuessSeq);
+    }
+    else
+    {
+        msg.reply("there's a time and place for everything. But not now!");
+    }
+}
+
+function DecryptoEnemyGuess(team, sequence)
+{
+    if(DVotes[team] == 1)
+    {
+        DecryptoChannel.send("Team " + DTeamSymbols[team] + " has already submitted their guess for the enemy's sequence.");
+        return;
+    }
+    var EmemyGuessStr = "Team " + DTeamSymbols[team] + " has guessed the enemy's sequence is:";
+    for(var i = 0; i < sequence.length; i++)
+    {
+        EmemyGuessStr = EmemyGuessStr + (sequence[i]+1) + " "
+    }
+    DVotes[team] = 1;
+    DecryptoChannel.send(EmemyGuessStr);
+    DEnemyGuesses[team] = sequence;
+
+    for(var t = 0; t <= 1; t++)
+    {
+        if(DVotes[t] == 0) return;
+    }
+    DState = DECRYPTOSTATE.GUESS_OWN;
+    BreifGuessOwn();
+}
+
+function DecryptoOwnGuess(team, sequence)
+{
+    if(DVotes[team] == 1)
+    {
+        DecryptoChannel.send("Team " + DTeamSymbols[team] + " has already submitted their guess for their own sequence.");
+        return;
+    }
+
+    if(ArrayEquals(DSequences[team],sequence))
+    {
+        DecryptoChannel.send("Team " + DTeamSymbols[team] + " has communicated properly.:ok:");
+    }
+    else
+    {
+        DecryptoChannel.send("Team " + DTeamSymbols[team] + " has miscommunicated!:x:");
+        DPoints[team][1]++;//add one miscommunication.
+    }
+    DVotes[team] = 1;
+
+    for(var t = 0; t <= 1; t++)
+    {
+        if(DVotes[t] == 0) return;
+    }
+    //resolve intercepts
+    for(var t = 0; t <= 1; t++)
+    {
+        console.log("Comparing |" + DEnemyGuesses[t].toString() + "| to |" + DSequences[1-t]);
+        if(ArrayEquals(DEnemyGuesses[t], DSequences[1-t]))
+        {
+            DecryptoChannel.send("Team " + DTeamSymbols[t] + " has intercepted!:eye:");
+            DPoints[t][0]++;//add one intercept.
+        }
+    }
+    //Add the clues to the previous clues.
+    for(var t = 0; t <= 1; t++)
+    {
+        for(var i = 0; i < DSequences[t].length; i++)
+        {
+            DPreviousClues[t][DSequences[t][i]].push(DClues[t][i]);
+        }
+    }
+    //resolve round end
+    if(DecryptoCheckGameEnd())//if the game is over
+    {
+        BotStatus = STATUS.READY;
+        return;
+    }
+    //otherwise, carry on.
+    for(var t = 0; t <= 1; t++)
+    {
+        DCluers[t] = mod(DCluers[t]+1,DPlayers[t].length);//move the cluers over
+    }
+    DSequences = [[],[]];//refresh sequences
+    DEnemyGuesses = [[],[]];
+    DClues = ['',''];//refresh clues
+    DRound++;
+    DState = DECRYPTOSTATE.CLUE;
+    BreifCluers();
+}
+
+function DecryptoCheckGameEnd()
+{
+    var WinnerMatrix = [[-1,0,0],[1,-1,0],[1,1,-1]];
+    var DWinnerStates = [1,1];//0 is a loss, 1 is a tie, 2 is a win.
+    var GameOver = false;
+    var DTeamTotals = [0,0];
+    if(DRound == 8) GameOver = true;
+    for(var t = 0; t <= 1; t++)//check each team
+    {
+        DTeamTotals[t] = DPoints[t][0]-DPoints[t][1];//intercepts - miscoms
+        if(DPoints[t][0] >= 2 && DPoints[t][0] >= 2)
+        {
+            DWinnerStates[t] = 1;//you are tied
+            GameOver = true;
+        }
+        else if(DPoints[t][0] >= 2)//if #intercepts is 2
+        {
+            DWinnerStates[t] = 2;
+            GameOver = true;
+        }
+        else if(DPoints[t][1] >= 2)//if #miscoms is 2
+        {
+            DWinnerStates[t] = 0;
+            GameOver = true;
+        }
+    }
+    if(!GameOver)
+    {
+        return false;
+    }
+
+    var GameEndMessage = ShowTeamsTokens() + "\n=============================\nThe game is over!\n";
+    var Winner = WinnerMatrix[DWinnerStates[1]][DWinnerStates[0]];
+    if(Winner != -1)
+    {
+        GameEndMessage = GameEndMessage + "Team " + DTeamSymbols[Winner] + " have won!:confetti_ball:";
+        DecryptoChannel.send(GameEndMessage);
+        return true;
+    }
+    if(DTeamTotals[1] == DTeamTotals[0])
+    {
+        GameEndMessage = GameEndMessage + "It's a tie! The two teams must now guess each others words. Unfortunately, I can't handle this, as I don't have sentience(blame August for not being good enough at Javascript).\nIt's up to the human players to decide if guesses are close enough.";
+        DecryptoChannel.send(GameEndMessage);
+        DecryptoChannel.send(CreatePrevCluesEmbed(0));
+        DecryptoChannel.send(CreatePrevCluesEmbed(1));
+        return true;
+    }
+    else if(DTeamTotals[1] > DTeamTotals[0])
+    {
+        GameEndMessage = GameEndMessage + "Team " + DTeamSymbols[1] + " have won!:confetti_ball:";
+        DecryptoChannel.send(GameEndMessage);
+        return true;
+    }
+    else
+    {
+        GameEndMessage = GameEndMessage + "Team " + DTeamSymbols[0] + " have won!:confetti_ball:";
+        DecryptoChannel.send(GameEndMessage);
+        return true;
+    }
+}
+
+function ShowTeamsTokens()
+{
+    var TeamsTokensStr = "";
+    for(var t = 0; t <= 1; t++)
+    {
+        TeamsTokensStr = TeamsTokensStr +  "Team " + DTeamSymbols[t] + " have:\n";
+        if(DPoints[t][0] == 1)
+        {
+            TeamsTokensStr = TeamsTokensStr + DPoints[t][0] + "  intercept:green_circle:.\n"
+        }
+        else
+        {
+            TeamsTokensStr = TeamsTokensStr + DPoints[t][0] + "  intercepts:green_circle:.\n"
+        }
+
+        if(DPoints[t][1] == 1)
+        {
+            TeamsTokensStr = TeamsTokensStr + DPoints[t][1] + "  miscommunication:red_circle:.\n"
+        }
+        else
+        {
+            TeamsTokensStr = TeamsTokensStr + DPoints[t][1] + "  miscommunications:red_circle:.\n"
+        }
+    }
+    return TeamsTokensStr;
+}
+
+function CreatePrevCluesEmbed(team)
+{
+    var CluesEmbed = new DISCORD.MessageEmbed()
+	.setColor('#FEFEFE')
+	.setTitle("Previous Clues")
+    .setAuthor("Team", "https://emoji.beeimg.com/" + DTeamSymbols[team]);
+
+    for(var i = 0; i < DPreviousClues[team].length;i++)
+    {
+        if(DPreviousClues[team][i].length != 0)
+            CluesEmbed.addField("Clues for word " + (i+1).toString(), DPreviousClues[team][i].toString(), true);
+    }
+    return CluesEmbed;
+}
+
+///
 /// Countdown
 ///
 
@@ -415,13 +1023,11 @@ async function InitCountdown(channel, settings)
     {
         if(i < VowelNo)//add vowel
         {
-            var VIndex = Math.floor(Math.random()*Vowels.length);
-            CountdownLetters.push(Vowels[VIndex]);
+            CountdownLetters.push(RandEle(Vowels));
         }
         else
         {
-            var CIndex = Math.floor(Math.random()*Consonants.length);
-            CountdownLetters.push(Consonants[CIndex]);
+            CountdownLetters.push(RandEle(Consonants));
         }
     }
     shuffle(CountdownLetters);
@@ -457,8 +1063,6 @@ function CDWord(msg, word)
     var word = word.toLowerCase();
     if(msg.channel != CountdownChannel && !(msg.channel instanceof DISCORD.DMChannel))
     {
-        
-        msg.reply("Please say that in either DMs or the game where countdown is being played.");
         return;
     }
 
@@ -527,10 +1131,18 @@ function CDEndGame()
     });
 
     var BestWordStr = "";
-    for(var i = 0; i < result[0][0].length; i++)
+    if(typeof(result[0][0]) == "undefined")
     {
-        BestWordStr = BestWordStr + LetterToEmoji(result[0][0].charAt(i));
+        BestWordStr = "?????CANT FIND????";
     }
+    else
+    {
+        for(var i = 0; i < result[0][0].length; i++)
+        {
+            BestWordStr = BestWordStr + LetterToEmoji(result[0][0].charAt(i));
+        }
+    }
+
     
     CountdownChannel.send(CDMessage + "\nExample of best word: " + BestWordStr);
     BotStatus = STATUS.READY;
@@ -940,7 +1552,6 @@ function StartAvalon(msg)//now that everyone has joined and evil are declared, t
             JefferyNumber++;
         }   
     }
-    console.log(APlayers.toString());
     //Send DMs with info.
     for(var i = 0; i < APlayers.length; i++)
     {
@@ -2287,7 +2898,6 @@ function WriteHS(PlayerIndex, name)
     var HS = GetSlotHS();
     if(BankAccounts[PlayerIndex][1] > HS[1])
     {
-        console.log("High score:" + HS.toString());
         HS[0] = name;
         HS[1] = BankAccounts[PlayerIndex][1];
     }
@@ -2419,4 +3029,25 @@ function hasDuplicates(array)
 function LetterToEmoji(Letter)
 {
     return ":regional_indicator_" + Letter + ":";
+}
+
+function RandEle(arr)
+{
+    var Index = Math.floor(Math.random()*arr.length);
+    return arr[Index];
+}
+
+function ArrayEquals(a,b)
+{
+
+    if(a.length != b.length) 
+    {
+       return false; 
+    }
+    else
+    { 
+        // comapring each element of array 
+        for(var i=0;i<a.length;i++) if(a[i]!=b[i]) return false; 
+        return true; 
+   } 
 }
