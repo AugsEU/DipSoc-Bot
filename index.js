@@ -771,6 +771,10 @@ function CandidatesSay(msg)
         msg.edit(Word);
 
         Transcript[NumQuestions][1] = Transcript[NumQuestions][1] + Word + " ";//Add to transcript
+        if(UndoStack.length/(JPlayers.length-1) >= WordsPerPerson && ( ["!",".","?","…"].includes(Word.charAt(Word.length-1)) || Word == "...") )
+        {
+            EndOfQuestion();
+        }
     }
 
     if(msg.author.id != JPlayers[CurrentSpeaker][1].id)
@@ -803,10 +807,15 @@ function CandidatesSay(msg)
     //resolve end of the speaking phase
     if(UndoStack.length/(JPlayers.length-1) >= WordsPerPerson && ["!",".","?"].includes(Word.charAt(Word.length-1)))
     {
-        JobChannel.send("```Q:" + Transcript[NumQuestions][0] + "\nA:" + Transcript[NumQuestions][1] + "```");
-        NumQuestions++;
-        BreifInterviewer();
+        EndOfQuestion();
     }
+}
+
+function EndOfQuestion()
+{
+    JobChannel.send("```Q:" + Transcript[NumQuestions][0] + "\nA:" + Transcript[NumQuestions][1] + "```");
+    NumQuestions++;
+    BreifInterviewer();
 }
 
 function JobHire(msg)
