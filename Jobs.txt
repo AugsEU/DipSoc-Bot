@@ -1,0 +1,30 @@
+Airplane - Pilot :woman_pilot:
+Amusement Park - Janitor :broom:
+Bank - Security Guard :moneybag:
+Beach - Lifeguard :beach:
+Carnival - Violin Player :violin:
+Casino - Blackjack dealer :black_joker:
+Circus Tent - Unhappy elephant :elephant:
+Corporate Party - Organiser :partying_face:
+Crusader Army - Lowly peasant :man_farmer:
+Day Spa - Levitating waiter :levitate:
+Embassy - Receptionist :desktop:
+Hospital - Nurse :hospital:
+Hotel - Chef :woman_cook:
+Military Base - Drill Sergeant :angry: 
+Movie Studio - Camera operator :movie_camera:
+Nightclub - Lighting control :flashlight:
+Ocean Liner - Coal shoveller :cruise_ship:
+Passenger Train - Conductor :steam_locomotive:
+Pirate Ship - Diseased person below deck :pirate_flag:
+Polar Station - Local Bear :bear:
+Police Station - Investigator (Columbo) :detective:
+Restaurant - Food critic :meat_on_bone:
+School - Class clown :clown:
+Service Station - Mechanic :man_mechanic:
+Space Station - Astronaut :woman_astronaut:
+Submarine - Periscope operator :eye:
+Supermarket - Invisible door operator :ghost:
+Theatre - Patrick Stewart :man_bald:
+University - Supervisor :man_teacher:
+Zoo - Kangaroo impersonator :kangaroo:

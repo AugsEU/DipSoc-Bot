@@ -1,19 +1,20 @@
 const fs = require('fs');
+const _ = require('underscore');
+const DISCORD = require('discord.js');
 const Wordnik_API = require('./wordnik.js'); 
 const COUNTDOWN = require('./countdown.js'); 
-const DISCORD = require('discord.js');
 const config =  require('./config.json');
 const emojis = require('./random-emoji.js');
 
+
 const BOT = new DISCORD.Client;
-
-
 
 const STATUS = {
     MIND : 'The Mind',
     AVALON: 'Avalon',
     COUNTDOWN: 'Countdown',
-    DECRYPTO: 'DECRYPTO',
+    DECRYPTO: 'Decrypto',
+    JOBINTERVIEW: 'Job interview simulator',
     READY: 'ready'
 }
 
@@ -29,10 +30,21 @@ BOT.on("ready", () =>{
 BOT.on("message", msg =>{
 
     if(msg.author.bot) return;//ignore any bots(including this one)
+
+    if(BotStatus == STATUS.JOBINTERVIEW)
+    {
+        switch(JState)
+        {
+            case JOBSIMSTATE.SPEAK:
+                CandidatesSay(msg);
+                break;
+        }
+    }
+
     if(msg.content.indexOf(config.prefix) !== 0) return;
 
     var noSpace = msg.content.replace(/\s+/g, " ");
-    let args = noSpace.substring(config.prefix.length).split(" ");
+    let args = noSpace.substring(config.prefix.length).toLowerCase().split(" ");
 
     if(BotStatus === STATUS.COUNTDOWN)
     {
@@ -78,6 +90,14 @@ BOT.on("message", msg =>{
             else if(args[1] == "countdown")
             {
                 msg.channel.send(config.countdownHelp);
+            }
+            else if(args[1] == "decrypto")
+            {
+                msg.channel.send(config.decryptoHelp);
+            }
+            else if(args[1] == "jobsim")
+            {
+                msg.channel.send(config.jobsimHelp);
             }
             else 
             {
@@ -135,6 +155,21 @@ BOT.on("message", msg =>{
                 msg.channel.send("A game of Decrypto :robot: is starting in #" + msg.channel.name + ". Enter !join if you want to join the game.");
                 DecryptoChannel = msg.channel;
                 InitDecrypto();
+            }
+            else
+            {
+                msg.channel.send("Bot is currently doing something else! Can't start a game of decrypto.");
+            }
+            break;
+        case "jobsim":
+            if(BotStatus == STATUS.READY)
+            {
+                BotStatus = STATUS.JOBINTERVIEW;
+                var interviewSimEmoji = ":man_office_worker:";
+                if(Math.random() >= 0.5) interviewSimEmoji = ":woman_office_worker:";
+                msg.channel.send("A game of Job interview simulator "+ interviewSimEmoji + " is starting in #" + msg.channel.name + ". Enter !join if you want to join the game.");
+                JobChannel = msg.channel;
+                InitJobSim();
             }
             else
             {
@@ -284,6 +319,36 @@ BOT.on("message", msg =>{
                     break;
             }
             break;
+        case STATUS.JOBINTERVIEW:
+            switch(args[0])
+            {
+                case "stopjobsim":
+                    msg.channel.send("Stopping Job interview simulator....");
+                    BotStatus = STATUS.READY;
+                    break;
+                case "join":
+                    
+                    JoinJobSim(msg,);
+                    break;
+                case "who":
+                    WhoJobs(msg);
+                    break;
+                case "start":
+                    args = args.splice(1);
+                    if(!args) args = [];
+                    StartJobSim(msg, args);
+                    break;
+                case "question":
+                    JobQuestion(msg);
+                    break;
+                case "hire":
+                    JobHire(msg);
+                    break;
+                case "seize":
+                    JobSeize(msg);
+                    break;
+            }
+            break;
     }
 
 })
@@ -422,6 +487,471 @@ function ShowBalance(msg)
 }
 
 ///
+///Job Interview Simulator
+///
+
+const JOBSIMSTATE = 
+{
+    JOIN: 'join',
+    GAME_READY: 'gameready',
+    SPEAK: 'speak',
+    INTERVIEWER: 'interviewer\'s turn',
+    COMMUNISTREVO: 'communist revolution'
+}
+
+const JOBROLES = 
+{
+    INTERVIEWER: 'the interviewer',
+    EXPERT: 'the expert',
+    PERCIVAL: 'percival',
+    CLUELESS: 'a clueless candidate'
+}
+
+const CluelessTeam = [JOBROLES.CLUELESS, JOBROLES.PERCIVAL];
+
+var WordsPerPerson;
+var JobChannel;
+
+var JState;
+var JPlayers;
+
+var PossibleJobs;
+var JobIndex;
+var CurrentQuestion;
+var Transcript;
+var CurrentSpeaker;
+var NumQuestions;
+var UndoStack;
+var IntPunc;
+
+function InitJobSim()
+{
+    JState = JOBSIMSTATE.JOIN;
+    JPlayers = [];
+    try 
+    {
+        const data = fs.readFileSync('./Jobs.txt', 'utf8');
+        PossibleJobs = data.split(/\r?\n/);//split by new line
+    } 
+    catch (err) 
+    {
+        console.error(err);
+        CloseBot();
+    }
+    JobIndex = 0;
+    CurrentQuestion = "";
+    CurrentAnswer = "";
+    Transcript = [];
+    CurrentSpeaker = 0;
+    NumQuestions = 0;
+    UndoStack = [];
+    IntPunc = false;
+}
+
+function JoinJobSim(msg)
+{
+    if(msg.channel !== JobChannel)
+    {
+        msg.reply("please say that in the channel where the game is being played.");
+        return;
+    }
+
+    if(JState == JOBSIMSTATE.JOIN)
+    {
+
+        if(!ArrSearch(JPlayers, msg.author.id))
+        {
+            JPlayers.push([msg.author.id, msg.member,'']);
+            JobChannel.send(msg.member.displayName + " has joined the game.");
+        }
+        else
+        {
+            msg.reply("looks like you are already part of the game.");
+        }
+    }
+    else
+    {
+        msg.channel.send("You can't join; the game is already in progress.");
+    }
+}
+
+function WhoJobs(msg)
+{
+    msg.channel.send("Players currently in the game:");
+    var PlayerList = "";
+    for (i = 0; i < JPlayers.length; i++) 
+    {
+        PlayerList =  PlayerList + " " + JPlayers[i][1].displayName + " |";
+    }
+    msg.channel.send(PlayerList + "\nTotal Players:" + JPlayers.length);
+}
+
+function StartJobSim(msg,settings)
+{
+    if(msg.channel != JobChannel)
+    {
+        msg.reply("please say that in the channel where the game is being played.");
+        return;
+    }
+
+    if(JState != JOBSIMSTATE.JOIN)
+    {
+        msg.reply("there's a time and place for everything. But not now!");
+        return;
+    }
+
+    if(JPlayers.length < 3)
+    {
+        msg.reply("Not enough people to start the game.");
+        return;
+    }
+
+    JState = JOBSIMSTATE.GAME_READY;
+    WordsPerPerson = Math.max(1,Math.round(15/(JPlayers.length-1)));
+    if(settings.includes("intpunc")) IntPunc = true;
+
+    shuffle(JPlayers);//shuffle players
+    AssignJobRoles(settings);
+    var SampleSize= Math.min(PossibleJobs.length, JPlayers.length*3);
+    PossibleJobs = _.sample(PossibleJobs, SampleSize);
+    PossibleJobs.sort();//alphabetical sort
+
+    if(JPlayers[CurrentSpeaker][2] == JOBROLES.INTERVIEWER) CurrentSpeaker++;//make sure the interviewer isn't current speaker
+    
+
+    JobIndex = Math.floor(Math.random()*PossibleJobs.length);//choose a random job
+    var JInterviewerIdx = -1;
+    for(var i = 0; i < JPlayers.length;i++)
+    {
+        switch(JPlayers[i][2])
+        {
+            case JOBROLES.INTERVIEWER:
+                JPlayers[i][1].send("======================\nYou are the interviewer. The job position is: " + PossibleJobs[JobIndex]  +"\nYou must ask questions to the candidates in order to find who is qualified.");
+                JInterviewerIdx = i;
+                break;
+            case JOBROLES.EXPERT:
+                JPlayers[i][1].send("======================\nYou are the expert. The job position is: "+ PossibleJobs[JobIndex]  +"\nYou must show that you know what you are talking about to the interviewer, without letting the other candidates know.");
+                break;
+            case JOBROLES.PERCIVAL:
+                var PercivalBreif = "======================\nYou are percival. The following people are experts:\n";
+                for(var j = 0; j < JPlayers.length;j++)
+                {
+                    if(JPlayers[j][2] == JOBROLES.EXPERT)
+                    {
+                        PercivalBreif = PercivalBreif + JPlayers[j][1].displayName + "\n";
+                    }
+                }
+                PercivalBreif = PercivalBreif + "You can't communicate this information other than through the sentences you form.";
+                JPlayers[i][1].send(PercivalBreif);
+                break;
+            case JOBROLES.CLUELESS:
+                JPlayers[i][1].send("======================\nYou are a clueless candidate.");
+                break;
+        }
+    }
+    
+    
+    var StartMessage = "The interview has begun.\n <@!" + JPlayers[JInterviewerIdx][1].id + "> is the interviewer.\nNumber of words per person: " + WordsPerPerson + "\n";
+    StartMessage = StartMessage + "These are the possible jobs:\n" + ListAllJobs();
+    JobChannel.send(StartMessage);
+
+    BreifInterviewer();
+}
+
+function ListAllJobs()
+{
+    var ReturnMsg = "";
+    for(var i = 0; i < PossibleJobs.length;i++)
+    {
+        ReturnMsg = ReturnMsg + (i+1).toString() + ". " + PossibleJobs[i] + "\n";
+    }
+    return ReturnMsg;
+}
+
+function AssignJobRoles(settings)
+{
+    //generate roles
+    var RolesInGame = [JOBROLES.INTERVIEWER, JOBROLES.EXPERT];
+    if(settings.includes("percival")) RolesInGame.push(JOBROLES.PERCIVAL);
+    for(var i = RolesInGame.length; i < JPlayers.length;i++)
+    {
+        RolesInGame.push(JOBROLES.CLUELESS);//fill rest with clueless
+    }
+    JobChannel.send("The following roles are in the game: " + RolesInGame.join(", "));
+    shuffle(RolesInGame);
+
+    for(var i = 0; i < JPlayers.length;i++)
+    {
+        JPlayers[i][2] = RolesInGame[i];
+    }
+}
+
+function BreifInterviewer()
+{
+    JState = JOBSIMSTATE.INTERVIEWER;
+    JobChannel.send("It is time for the interviewer to ask a question or hire someone.\n!question to ask a question\ne.g. !question Why are you here?\nType !hire @username to hire someone.");
+}
+
+function JobQuestion(msg)
+{
+    if(msg.channel != JobChannel)
+    {
+        msg.reply("please say that in the channel where the game is being played.");
+        return;
+    }
+
+    if(JState != JOBSIMSTATE.INTERVIEWER)
+    {
+        msg.reply("there's a time and place for everything. But not now!");
+        return;
+    }
+    
+    var Idx = GetMsgSenderIdx(msg.author.id, JPlayers);
+    if(Idx == -1)
+    {
+        msg.reply("you aren't playing the game");
+        return;
+    }
+
+    if(JPlayers[Idx][2] != JOBROLES.INTERVIEWER)
+    {
+        DeleteMessage(msg, "you aren't the interviewer");
+        return;
+    }
+
+    CurrentQuestion = msg.content.split(' ').slice(1).join(' ');
+    Transcript.push([CurrentQuestion,""]);//Add question to transcript
+    if(CurrentQuestion == "" || CurrentQuestion == " " || CurrentQuestion == "?")
+    {
+        msg.reply("you didn't enter a question. Try again.");
+        return;
+    }
+    
+    BreifCandidates();
+}
+
+function BreifCandidates()
+{
+    JState = JOBSIMSTATE.SPEAK;
+    UndoStack = [];
+    var CandidatesMessage = "The interviewer has asked their question. Answer in the following order: \n";
+    for(var i = 0; i < JPlayers.length-1;i++)
+    {
+        var Idx = GetSpeakerIndex(i);
+        CandidatesMessage = CandidatesMessage + JPlayers[Idx][1].displayName + " \n";
+    }
+    CandidatesMessage = CandidatesMessage + "The question is: " + CurrentQuestion;
+    JobChannel.send(CandidatesMessage);
+}
+
+function CandidatesSay(msg)
+{
+    if(msg.channel != JobChannel)
+    {
+        return;
+    }
+
+    var SpeakerIdx = GetMsgSenderIdx(msg.author.id,JPlayers);
+    if(JPlayers[SpeakerIdx][2] == JOBROLES.INTERVIEWER && IntPunc)
+    {
+        //reject any bad words
+        const ValidWord = /(((\.{3})|[,!….?;:]))/gi;
+        var Word = msg.content.match(ValidWord);
+        if(!Word)
+        {
+            DeleteMessage(msg, "I don't understand this.");    
+            return;
+        }
+        if(Word.length != 1)
+        {
+            DeleteMessage(msg, "Too much punctuation.");    
+            return;
+        }
+        Word = Word[0];
+        msg.edit(Word);
+
+        Transcript[NumQuestions][1] = Transcript[NumQuestions][1] + Word + " ";//Add to transcript
+    }
+
+    if(msg.author.id != JPlayers[CurrentSpeaker][1].id)
+    {
+        DeleteMessage(msg, "it's not your turn.\nIt is <@!" + JPlayers[CurrentSpeaker][1].id + "> 's turn");    
+        return;
+    }
+    //reject any bad words
+    const ValidWord = IntPunc? /#?([A-Za-z0-9'-]+)|[&@]/gi  : /(#?([A-Za-z0-9'-]+)((\.{3})|[,!.…?;:%])?)|[&@]/gi;
+    var Word = msg.content.match(ValidWord);
+    if(!Word)
+    {
+        DeleteMessage(msg, "I don't understand this.");    
+        return;
+    }
+    if(Word.length != 1)
+    {
+        DeleteMessage(msg, "I think that's too many words");    
+        return;
+    }
+    
+    Word = Word[0];
+    msg.edit(Word);
+    UndoStack.push(Word);
+
+    Transcript[NumQuestions][1] = Transcript[NumQuestions][1] + " " + Word;//Add to transcript
+
+    CurrentSpeaker = GetSpeakerIndex(1);//Add one to the current index
+
+    //resolve end of the speaking phase
+    if(UndoStack.length/(JPlayers.length-1) >= WordsPerPerson && ["!",".","?"].includes(Word.charAt(Word.length-1)))
+    {
+        JobChannel.send("```Q:" + Transcript[NumQuestions][0] + "\nA:" + Transcript[NumQuestions][1] + "```");
+        NumQuestions++;
+        BreifInterviewer();
+    }
+}
+
+function JobHire(msg)
+{
+    if(msg.channel != JobChannel)
+    {
+        msg.reply("please say that in the channel where the game is being played.");
+        return;
+    }
+
+    if(JState != JOBSIMSTATE.INTERVIEWER)
+    {
+        msg.reply("there's a time and place for everything. But not now!");
+        return;
+    }
+    
+    var Idx = GetMsgSenderIdx(msg.author.id, JPlayers);
+    if(Idx == -1)
+    {
+        msg.reply("you aren't playing the game");
+        return;
+    }
+    if(JPlayers[Idx][2] != JOBROLES.INTERVIEWER)
+    {
+        DeleteMessage(msg, "you aren't the interviewer");
+        return;
+    }
+
+    var noSpace = msg.content.replace(/\s+/g, " ");
+    var args = noSpace.substring(config.prefix.length).split(" ");
+    if(!args[1])
+    {
+        msg.reply("I don't understand. Try again.");
+        return;
+    }
+
+    var LookingFor = args[1].replace(/[\\<>@#&!]/g, "");
+    var HiredIndex = GetMsgSenderIdx(LookingFor, JPlayers);
+    if(JPlayers[HiredIndex][2] == JOBROLES.INTERVIEWER)
+    {
+        msg.reply("you can't hire yourself. Try again.");
+        return;
+    }
+
+    if(CluelessTeam.includes(JPlayers[HiredIndex][2]))//clueless team win
+    {
+        JobChannel.send("You hired a clueless person...\n***CLUELESS TEAM WINS!!***\n" + JRevealRoles());
+        BotStatus = STATUS.READY;
+        JobChannel.send(GetTranscript());
+    }
+    else//communist revolt time
+    {
+        JobChannel.send("You hired the right person.\nThe clueless people organise a revolution to seize the means of production.\nBut what are they seizing?\n" + ListAllJobs() + "\nUse \"!seize [number]\" to seize the means of production.\ne.g.!seize 3");
+        JState = JOBSIMSTATE.COMMUNISTREVO;
+    }
+}
+
+function JobSeize(msg)
+{
+    if(msg.channel != JobChannel)
+    {
+        msg.reply("please say that in the channel where the game is being played.");
+        return;
+    }
+
+    if(JState != JOBSIMSTATE.COMMUNISTREVO)
+    {
+        msg.reply("there's a time and place for everything. But not now!");
+        return;
+    }
+    
+    var Idx = GetMsgSenderIdx(msg.author.id, JPlayers);
+    if(Idx == -1)
+    {
+        msg.reply("you aren't playing the game");
+        return;
+    }
+    if(!CluelessTeam.includes(JPlayers[Idx][2]))
+    {
+        DeleteMessage(msg, "you are the interviewer");
+        return;
+    }
+
+    var noSpace = msg.content.replace(/\s+/g, " ");
+    var args = noSpace.substring(config.prefix.length).split(" ");
+    if(!args[1])
+    {
+        msg.reply("I don't understand. Try again.");
+        return;
+    }
+
+    if(isNaN(args[1]))
+    {
+        msg.reply("not a number. Try again.");
+        return;
+    }
+
+    if((Number(args[1])-1) == JobIndex)
+    {
+        JobChannel.send("The communist revolution is successful.\n***CLUELESS TEAM WINS!!***\n" + JRevealRoles());
+    }
+    else
+    {
+        JobChannel.send("The communist revolution fails.\n***THE EXPERT & INTERVIEWER WIN!!***\n" + JRevealRoles() + "\nThe job position was:" + PossibleJobs[JobIndex]);
+    }
+    JobChannel.send(GetTranscript());
+    BotStatus = STATUS.READY;
+}
+
+function JRevealRoles()
+{
+    var RolesStr = "";
+    for(var i = 0; i < JPlayers.length; i++)
+    {
+        RolesStr = RolesStr + JPlayers[i][1].displayName + " was " + JPlayers[i][2] + "\n";
+    }
+    return RolesStr;
+}
+
+function GetSpeakerIndex(idx)
+{
+    var ReturnVal=CurrentSpeaker;
+    for(i = 0; i < idx; i++)
+    {
+        ReturnVal = mod(1 + ReturnVal, JPlayers.length);
+        if(JPlayers[ReturnVal][2] == JOBROLES.INTERVIEWER) ReturnVal = mod(1 + ReturnVal, JPlayers.length);
+    }
+    return ReturnVal;
+}
+
+function GetTranscript()
+{
+    var ReturnStr = "```";
+    for(var i = 0; i < Transcript.length;i++)
+    {
+        ReturnStr = ReturnStr + "Q:" + Transcript[i][0] + "\n";
+        ReturnStr = ReturnStr + "A:" + Transcript[i][1] + "\n\n";
+
+    }
+    ReturnStr = ReturnStr + "```";
+    return ReturnStr;
+}
+
+
+///
 ///Decrypto
 ///
 
@@ -482,7 +1012,7 @@ function JoinDecrypto(msg)
         }
         else
         {
-            msg.reply("looks like you already part of the game.");
+            msg.reply("looks like you are already part of the game.");
         }
     }
     else
@@ -684,6 +1214,8 @@ function DecryptoClue(msg)
         msg.reply("you have already given a clue");
         return;
     }
+    
+    
 
     if(msg.content.length <= 5)
     {
@@ -741,7 +1273,7 @@ function BreifGuessEnemy()
 function BreifGuessOwn()
 {
     DVotes = [0,0];
-    DecryptoChannel.send("==========================\nIt is now time for you to ***your own team's*** sequence.\nType !guess to make a guess at the sequence\nE.G. !guess 1, 2, 4");
+    DecryptoChannel.send("==========================\nIt is now time for you to guess ***your own team's*** sequence.\nType !guess to make a guess at the sequence\nE.G. !guess 1, 2, 4");
 }
 
 function DecryptoGuess(msg)
@@ -761,6 +1293,7 @@ function DecryptoGuess(msg)
         msg.reply("error! Does your sequence have 3 numbers?\nPlease try again.");
         return;
     }
+
 
     for(var i = 0; i < GuessSeq.length; i++)
     {
@@ -782,6 +1315,11 @@ function DecryptoGuess(msg)
             return;
         }
         GuessSeq[i] = MyNumber-1;
+    }
+    if(hasDuplicates(GuessSeq))
+    {
+        msg.reply("sequence has duplicates! Please try again.");
+        return;
     }
 
     var GuessTeam = DecryptoGetMsgSender(msg)[0];
@@ -838,7 +1376,12 @@ function DecryptoOwnGuess(team, sequence)
     }
     else
     {
-        DecryptoChannel.send("Team " + DTeamSymbols[team] + " has miscommunicated!:x:");
+        var TrueSeq = "";
+        for(var i = 0; i < DSequences[team].length;i++)
+        {
+            TrueSeq = TrueSeq + (DSequences[team][i] + 1).toString() + " ";
+        }
+        DecryptoChannel.send("Team " + DTeamSymbols[team] + " has miscommunicated!:x:\nThe real sequence was " + TrueSeq);
         DPoints[team][1]++;//add one miscommunication.
     }
     DVotes[team] = 1;
@@ -850,7 +1393,6 @@ function DecryptoOwnGuess(team, sequence)
     //resolve intercepts
     for(var t = 0; t <= 1; t++)
     {
-        console.log("Comparing |" + DEnemyGuesses[t].toString() + "| to |" + DSequences[1-t]);
         if(ArrayEquals(DEnemyGuesses[t], DSequences[1-t]))
         {
             DecryptoChannel.send("Team " + DTeamSymbols[t] + " has intercepted!:eye:");
@@ -869,6 +1411,8 @@ function DecryptoOwnGuess(team, sequence)
     if(DecryptoCheckGameEnd())//if the game is over
     {
         BotStatus = STATUS.READY;
+        DecryptoChannel.send(CreatePrevCluesEmbed(0));
+        DecryptoChannel.send(CreatePrevCluesEmbed(1));
         return;
     }
     //otherwise, carry on.
@@ -927,8 +1471,6 @@ function DecryptoCheckGameEnd()
     {
         GameEndMessage = GameEndMessage + "It's a tie! The two teams must now guess each others words. Unfortunately, I can't handle this, as I don't have sentience(blame August for not being good enough at Javascript).\nIt's up to the human players to decide if guesses are close enough.";
         DecryptoChannel.send(GameEndMessage);
-        DecryptoChannel.send(CreatePrevCluesEmbed(0));
-        DecryptoChannel.send(CreatePrevCluesEmbed(1));
         return true;
     }
     else if(DTeamTotals[1] > DTeamTotals[0])
@@ -982,7 +1524,7 @@ function CreatePrevCluesEmbed(team)
     for(var i = 0; i < DPreviousClues[team].length;i++)
     {
         if(DPreviousClues[team][i].length != 0)
-            CluesEmbed.addField("Clues for word " + (i+1).toString(), DPreviousClues[team][i].toString(), true);
+            CluesEmbed.addField("Clues for word " + (i+1).toString(), DPreviousClues[team][i].join("\n"), true);
     }
     return CluesEmbed;
 }
@@ -1030,6 +1572,7 @@ async function InitCountdown(channel, settings)
             CountdownLetters.push(RandEle(Consonants));
         }
     }
+    if(Math.random() >= (0.40)) CountdownLetters[0] = "*";//add wildcard
     shuffle(CountdownLetters);
     CountdownMsg = await CountdownChannel.send(CDMessage());
     CDUpdater = setInterval(UpdateTime, 5000);
@@ -1058,26 +1601,42 @@ function CDMessage()
     return ReturnMsg;
 }
 
-function CDWord(msg, word)
+function CDWord(msg, subword)
 {
-    var word = word.toLowerCase();
+    var word = subword.toLowerCase();
+
     if(msg.channel != CountdownChannel && !(msg.channel instanceof DISCORD.DMChannel))
     {
         return;
     }
 
+    if (!(/^[a-zA-Z]+$/.test(word)))
+    {
+        msg.reply("please only use letters, no other symbols allowed.");
+        return;
+    }
+
     var PotentialLetters = CountdownLetters.slice();
-    
+    var NumLettersMissing = 0;
     for (var i = 0; i < word.length; i++) //check if word uses valid letters.
     {
         var MyChar = word.charAt(i);
         if(!PotentialLetters.includes(MyChar))
         {
-            msg.reply("That word doesn't use the right letters.");
-            return;
+            NumLettersMissing++;
+            continue;
         }
         var LetterIdx = PotentialLetters.indexOf(MyChar);
         PotentialLetters.splice(LetterIdx,1);//remove letter from pool.
+    }
+
+    if(NumLettersMissing > 0)
+    {
+        if(!(NumLettersMissing == 1 && CountdownLetters.includes("*")))
+        {
+            msg.reply("you can't make that word with these letters.");
+            return;
+        }
     }
     
     if(word.length < BestWord[1].length)//check if it's the new best
@@ -1120,8 +1679,19 @@ function CDEndGame()
     }
 
     var result = [];
-    
-    COUNTDOWN.solve_letters(CountdownLetters.join(""), function(word, c) { result.push([word, c]); });
+    if(CountdownLetters.includes("*"))
+    {
+        var WildIndex = CountdownLetters.indexOf("*");
+        for(var iChar = 97; iChar <= 122; iChar++)
+        {
+            CountdownLetters[WildIndex] = String.fromCharCode(iChar);
+            COUNTDOWN.solve_letters(CountdownLetters.join(""), function(word, c) { result.push([word, c]); });
+        }
+    }
+    else
+    {
+        COUNTDOWN.solve_letters(CountdownLetters.join(""), function(word, c) { result.push([word, c]); });
+    }
 
     result.sort(function(a, b) {
         if (b[0].length != a[0].length)
@@ -1139,7 +1709,7 @@ function CDEndGame()
     {
         for(var i = 0; i < result[0][0].length; i++)
         {
-            BestWordStr = BestWordStr + LetterToEmoji(result[0][0].charAt(i));
+            BestWordStr = BestWordStr + LetterToEmoji(result[0][0].charAt(i)) + " ";
         }
     }
 
@@ -1327,7 +1897,7 @@ function JoinAvalon(msg)
         }
         else
         {
-            msg.reply("looks like you already part of the game.");
+            msg.reply("looks like you are already part of the game.");
         }
     }
     else
@@ -2443,7 +3013,7 @@ function JoinMind(msg)
         }
         else
         {
-            msg.reply("looks like you already part of the game.");
+            msg.reply("looks like you are already part of the game.");
         }
     }
     else
@@ -2948,6 +3518,7 @@ function ClearDebts(msg)
 
 function CloseBot()
 {
+
     BOT.destroy();
 }
 
@@ -3028,6 +3599,7 @@ function hasDuplicates(array)
 
 function LetterToEmoji(Letter)
 {
+    if(Letter == "*") return ":eight_spoked_asterisk:";
     return ":regional_indicator_" + Letter + ":";
 }
 
@@ -3050,4 +3622,20 @@ function ArrayEquals(a,b)
         for(var i=0;i<a.length;i++) if(a[i]!=b[i]) return false; 
         return true; 
    } 
+}
+
+function GetMsgSenderIdx(PersonID, PlayerList)
+{
+    for(var i = 0; i < PlayerList.length; i++)
+    {
+        if(PlayerList[i][1].id == PersonID) return i;
+    }
+    return -1;
+}
+
+async function DeleteMessage(msg, thereason)
+{
+    var BotMessage = await msg.reply(thereason);
+    await msg.delete({timeout: 1000, reason: thereason});
+    BotMessage.delete({timeout: 0, reason: ""});
 }
