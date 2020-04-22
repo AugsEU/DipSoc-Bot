@@ -1,6 +1,5 @@
 Acne
 Acre
-Addendum
 Advertise
 Aircraft
 Aisle
@@ -10,7 +9,6 @@ America
 Ankle
 Apathy
 Applause
-Applesauc
 Application
 Archaeologist
 Aristocrat
@@ -22,6 +20,7 @@ Athlete
 Atlantis
 Aunt
 Avocado
+Acrobat
 Baby-Sitter
 Backbone
 Bag
@@ -57,7 +56,6 @@ Blossom
 Blueprint
 Blunt
 Blur
-Boa
 Boat
 Bob
 Bobsled
@@ -69,7 +67,6 @@ Booth
 Bowtie
 Box
 Boy
-Brainstorm
 Brand
 Brave
 Bride
@@ -124,7 +121,7 @@ Cliff
 Cloak
 Clockwork
 Clown
-Clue
+Clues
 Coach
 Coal
 Coaster
@@ -155,8 +152,8 @@ Crumb
 Crust
 Cuff
 Curtain
-Cuticle
-Czar
+Cool
+Coward
 Dad
 Dart
 Dawn
@@ -351,7 +348,6 @@ Lizard
 Log
 Loiterer
 Lollipop
-Loveseat
 Loyalty
 Lunch
 Lunchbox
@@ -379,7 +375,6 @@ Monday
 Money
 Monitor
 Monster
-Mooch
 Moon
 Mop
 Moth
@@ -399,7 +394,9 @@ Niece
 Night
 Nightmare
 Nose
+Noise
 Oar
+Oak
 Observatory
 Office
 Oil
@@ -412,14 +409,12 @@ Organ
 Organize
 Outer
 Outside
-Ovation
 Overture
 Pail
 Paint
-Pajamas
+Pyjamas
 Palace
 Pants
-Paper
 Paper
 Park
 Parody
@@ -431,7 +426,6 @@ Pear
 Pen
 Pencil
 Pendulum
-Penis
 Penny
 Pepper
 Personal
@@ -485,6 +479,7 @@ Race
 Radio
 Raft
 Rag
+Rage
 Rainbow
 Rainwater
 Random
@@ -492,13 +487,11 @@ Ray
 Recycle
 Red
 Regret
-Reimbursement
-Retaliate
 Rib
 Riddle
 Rim
 Rink
-Roller
+Roll
 Room
 Rose
 Round
@@ -518,13 +511,11 @@ Satellite
 Scar
 Scared
 School
-Scoundrel
 Scramble
 Scuff
 Seashell
 Season
 Sentence
-Sequins
 Set
 Shaft
 Shallow
@@ -586,14 +577,13 @@ Streamline
 Stripe
 Student
 Sun
-Sunburn
 Sushi
 Swamp
 Swarm
 Sweater
 Swimming
 Swing
-Tachometer
+Taken
 Talk
 Taxi
 Teacher
@@ -611,7 +601,6 @@ Tide
 Tiger
 Time
 Tinting
-Tiptoe
 Tiptop
 Tired
 Tissue
@@ -633,9 +622,7 @@ Tub
 Tuba
 Tutor
 Television
-Twang
 Twig
-Twitterpated
 Type
 Unemployed
 Upgrade
@@ -646,11 +633,10 @@ Water
 Watermelon
 Wax
 Wedding
-Weed
+Weeds
 Welder
 Whatever
 Wheelchair
-Whiplash
 Whisk
 Whistle
 White
@@ -664,10 +650,14 @@ Wool
 World
 Worm
 Wristwatch
+Wizard
 Yardstick
+Xylophone
 Zamboni
 Zen
 Zero
 Zipper
 Zone
 Zoo
+Dipsoc
+Avalon

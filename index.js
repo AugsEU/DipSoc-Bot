@@ -752,11 +752,13 @@ function CandidatesSay(msg)
     }
 
     var SpeakerIdx = GetMsgSenderIdx(msg.author.id,JPlayers);
-    if(JPlayers[SpeakerIdx][2] == JOBROLES.INTERVIEWER && IntPunc)
+    var Word;
+    var Space = " ";
+    if(SpeakerIdx != -1 && JPlayers[SpeakerIdx][2] == JOBROLES.INTERVIEWER && IntPunc)
     {
         //reject any bad words
         const ValidWord = /(((\.{3})|[,!….?;:]))/gi;
-        var Word = msg.content.match(ValidWord);
+        Word = msg.content.match(ValidWord);
         if(!Word)
         {
             DeleteMessage(msg, "I don't understand this.");    
@@ -768,44 +770,43 @@ function CandidatesSay(msg)
             return;
         }
         Word = Word[0];
-        msg.edit(Word);
+        //msg.edit(Word);
+        Space = "";
+    }
+    else
+    {
 
-        Transcript[NumQuestions][1] = Transcript[NumQuestions][1] + Word + " ";//Add to transcript
-        if(UndoStack.length/(JPlayers.length-1) >= WordsPerPerson && ( ["!",".","?","…"].includes(Word.charAt(Word.length-1)) || Word == "...") )
+        if(msg.author.id != JPlayers[CurrentSpeaker][1].id)
         {
-            EndOfQuestion();
+            DeleteMessage(msg, "it's not your turn.\nIt is <@!" + JPlayers[CurrentSpeaker][1].id + "> 's turn");    
+            return;
         }
+        //reject any bad words
+        const ValidWord = IntPunc? /#?([A-Za-z0-9'-]+)|[&@]/gi  : /(#?([A-Za-z0-9'-]+)((\.{3})|[,!.…?;:%])?)|[&@]/gi;
+        var Word = msg.content.match(ValidWord);
+        if(!Word)
+        {
+            DeleteMessage(msg, "I don't understand this.");    
+            return;
+        }
+        if(Word.length != 1)
+        {
+            DeleteMessage(msg, "I think that's too many words");    
+            return;
+        }
+        
+        Word = Word[0];
+        //msg.edit(Word);
+        UndoStack.push(Word);
+        CurrentSpeaker = GetSpeakerIndex(1);//Add one to the current index
+        Space = " ";
     }
 
-    if(msg.author.id != JPlayers[CurrentSpeaker][1].id)
-    {
-        DeleteMessage(msg, "it's not your turn.\nIt is <@!" + JPlayers[CurrentSpeaker][1].id + "> 's turn");    
-        return;
-    }
-    //reject any bad words
-    const ValidWord = IntPunc? /#?([A-Za-z0-9'-]+)|[&@]/gi  : /(#?([A-Za-z0-9'-]+)((\.{3})|[,!.…?;:%])?)|[&@]/gi;
-    var Word = msg.content.match(ValidWord);
-    if(!Word)
-    {
-        DeleteMessage(msg, "I don't understand this.");    
-        return;
-    }
-    if(Word.length != 1)
-    {
-        DeleteMessage(msg, "I think that's too many words");    
-        return;
-    }
-    
-    Word = Word[0];
-    msg.edit(Word);
-    UndoStack.push(Word);
+    Transcript[NumQuestions][1] = Transcript[NumQuestions][1] + Space + Word;//Add to transcript
 
-    Transcript[NumQuestions][1] = Transcript[NumQuestions][1] + " " + Word;//Add to transcript
-
-    CurrentSpeaker = GetSpeakerIndex(1);//Add one to the current index
 
     //resolve end of the speaking phase
-    if(UndoStack.length/(JPlayers.length-1) >= WordsPerPerson && ["!",".","?"].includes(Word.charAt(Word.length-1)))
+    if(UndoStack.length/(JPlayers.length-1) >= WordsPerPerson && ["!",".","?","…"].includes(Word.charAt(Word.length-1)))
     {
         EndOfQuestion();
     }
