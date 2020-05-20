@@ -5,6 +5,8 @@ const Wordnik_API = require('./wordnik.js');
 const COUNTDOWN = require('./countdown.js'); 
 const config =  require('./config.json');
 const emojis = require('./random-emoji.js');
+const Grapheme = require('grapheme-splitter');
+var G_splitter = new Grapheme();
 
 
 const BOT = new DISCORD.Client;
@@ -15,6 +17,7 @@ const STATUS = {
     COUNTDOWN: 'Countdown',
     DECRYPTO: 'Decrypto',
     JOBINTERVIEW: 'Job interview simulator',
+    CANTSTOP: 'can\'t stop',
     READY: 'ready'
 }
 
@@ -176,6 +179,19 @@ BOT.on("message", msg =>{
                 msg.channel.send("Bot is currently doing something else! Can't start a game of decrypto.");
             }
             break;
+        case "cantstop":
+            if(BotStatus == STATUS.READY)
+            {
+                BotStatus = STATUS.CANTSTOP;
+                msg.channel.send("A game of Can\'t Stop :game_die: is starting in #" + msg.channel.name + ". Enter !join if you want to join the game.");
+                CSChannel = msg.channel;
+                InitCantStop();
+            }
+            else
+            {
+                msg.channel.send("Bot is currently doing something else! Can't start a game of decrypto.");
+            }
+            break;
         case "slots":
             if(args[1] == "pull")
             {
@@ -184,14 +200,8 @@ BOT.on("message", msg =>{
             else if(args[1] == "highscore")
             {
                 var HS = GetSlotHS();
-                
                 msg.channel.send("Current slots highscore is:\n" + HS[1] +"$ by " + HS[0]);
             }
-            break;
-
-        case "here":
-            //BotChannel = msg.channel;
-            //BotChannel.send("Default bot channel is #" + BotChannel.name);
             break;
         case "account":
             ShowBalance(msg);
@@ -200,7 +210,7 @@ BOT.on("message", msg =>{
             WordCommand(msg);
             break;
         case "ding":
-            msg.reply("URCH");
+            msg.channel.send("🟦".repeat(1999));
             break;
         case "roll":
             var MaxVal = 10;
@@ -226,7 +236,7 @@ BOT.on("message", msg =>{
                     JoinAvalon(msg);
                     break;
                 case "who":
-                    WhoAvalon(msg);
+                    WhoGame(APlayers, msg);
                     break;
                 case "roles":
                     DeclareRoles(msg);
@@ -264,7 +274,6 @@ BOT.on("message", msg =>{
                 case "sfx":
                     AvalonSfx(msg);
                     break;
-                
             }
             break;
         case STATUS.MIND:
@@ -278,7 +287,7 @@ BOT.on("message", msg =>{
                     JoinMind(msg);
                     break;
                 case "who":
-                    WhoMind(msg);
+                    WhoGame(MPlayers, msg);
                     break;
                 case "start":
                     StartMind(msg);
@@ -292,7 +301,6 @@ BOT.on("message", msg =>{
                 case "shuriken":
                     MindShuriken(msg);
                     break;
-                    
             }
             break;
         case STATUS.DECRYPTO:
@@ -331,7 +339,7 @@ BOT.on("message", msg =>{
                     JoinJobSim(msg,);
                     break;
                 case "who":
-                    WhoJobs(msg);
+                    WhoGame(JPlayers, msg);
                     break;
                 case "start":
                     args = args.splice(1);
@@ -346,6 +354,37 @@ BOT.on("message", msg =>{
                     break;
                 case "seize":
                     JobSeize(msg);
+                    break;
+            }
+            break;
+        case STATUS.CANTSTOP:
+            switch(args[0])
+            {
+                case "stopcs":
+                    msg.channel.send("Stopping Can\'t Stop...");
+                    BotStatus = STATUS.READY;
+                    break;
+                case "join":
+                    JoinCS(msg,);
+                    break;
+                case "who":
+                    WhoGame(CSPlayers, msg);
+                    break;
+                case "start":
+                    StartCS(msg);
+                    break;
+                case "a":
+                case "action":
+                    if(isNaN(args[1])){ msg.reply("I don't understand this."); return;}
+                    ActionCS(msg, Number(args[1]) - 1);
+                    break;
+                case "c":
+                case "continue":
+                    CSContinue(msg);
+                    break;
+                case "s":
+                case "stop":
+                    CSStop(msg);
                     break;
             }
             break;
@@ -487,6 +526,722 @@ function ShowBalance(msg)
 }
 
 ///
+///Cant Stop
+///
+
+const CS_STATES = 
+{
+    JOIN: 'join',
+    GAME_READY: 'gameready',
+    ACTION: 'Action',
+    CONTSTOP: 'Continue or Stop'
+}
+
+const CS_DICE_TYPES = 
+{
+    NUMBER: 'num',
+    EVENT: 'event'
+}
+
+const CS_ROLLTYPES =//different types of actions
+{
+    NOTPOSSIBLE: 'not possible',
+    NORMALADD: 'normal add',
+    EVENT: 'event',
+}
+
+//Class Defs
+//Mountain: {Wins: , Tiles: };
+//Dice: {Type: , Value: }
+//Token: {Line: , Height: }
+//Action: {Type: , Values: []} or {Type: , Event: , Values: []}
+
+const EventProb = 25;
+const CS_DICE_EVENTS = ['explosion', 'rock slide', 'tornado'];
+const DiceSplits = [[0,1,2,3],[0,2,1,3],[0,3,1,2]];
+
+var CSPlayers;
+var Mountain;
+var CSChannel;
+var CSState;
+var CSDieSides;
+var CSTurnIdx;
+var TempTokens;
+var CurrentDice;
+var CurrentOptions;
+
+
+function InitCantStop()
+{
+    CSPlayers = [];
+    Mountain = {Wins: [], Tiles: []};
+    CSState = CS_STATES.JOIN;
+    CSDieSides = 6;
+    CSTurnIdx = 0;
+    TempTokens = [];
+    CurrentOptions = [];
+}
+
+function JoinCS(msg)
+{
+    if(msg.channel != CSChannel)
+    {
+        msg.reply("please say that in the channel where the game is being played.");
+        return;
+    }
+
+    if(CSPlayers.length >= 9)
+    {
+        msg.reply("Sorry, the game is already at capacity.");
+        return;
+    }
+
+    if(CSState == CS_STATES.JOIN)
+    {
+        if(!ArrSearch(CSPlayers, msg.author.id))
+        {
+            CSPlayers.push([msg.author.id, msg.member,'']);
+            CSChannel.send(msg.member.displayName + " has joined the game.");
+        }
+        else
+        {
+            msg.reply("looks like you are already part of the game.");
+        }
+    }
+    else
+    {
+        msg.channel.send("You can't join; the game is already in progress.");
+    }
+}
+
+function StartCS(msg)
+{
+    if(msg.channel != CSChannel)
+    {
+        msg.reply("please say that in the channel where the game is being played.");
+        return;
+    }
+
+    if(CSState != CS_STATES.JOIN)
+    {
+        msg.reply("there's a time and place for everything. But not now!");
+        return;
+    }
+
+    if(CSPlayers.length < 2)
+    {
+        msg.reply("Not enough people to start the game. Need at least 2 people.");
+        return;
+    }
+
+    CSState = CS_STATES.GAME_READY;
+    var StartBreif = "Can't Stop has begun.\n";
+
+    CSDieSides = CSPlayers.length + 1;
+    CSDieSides = Math.max(6,CSDieSides);//6 sides is the minimum.
+    CSDieSides = Math.min(10,CSDieSides);//10 is the maximum.
+
+    var PlayerEmojis = emojis.randomAnimalEmojiSet(CSPlayers.length);
+    for(var i = 0; i < CSPlayers.length; i++)
+    {
+        CSPlayers[i][2] = PlayerEmojis[i];
+        StartBreif = StartBreif + CSPlayers[i][1].displayName + " is " + PlayerEmojis[i] + "\n";
+    }
+
+    Mountain = GenerateCSMountain();//
+
+    shuffle(CSPlayers);
+    CSChannel.send(StartBreif);
+    CSStartNextTurn();
+}
+
+function GenerateCSMountain()
+{
+    var Width = (CSDieSides)*2-1;
+    var MountainTiles = [];
+    var MountainWins = [];
+    for(var i = 0; i < Width; i++)//fill in mountain squares
+    {
+        var Col = [];
+        var ColHeight = GetHeightFromDie(CSDieSides,i);
+        for(var j = 0; j < ColHeight; j++)
+        {
+            Col.push(-1); //-1 Means nobody is on this tile.
+        }
+        MountainTiles.push(Col);
+        MountainWins.push(-1);//-1 means nobody has won this tile.
+    }
+    
+    return Mountain = {Wins: MountainWins, Tiles: MountainTiles};
+}
+
+function GetHeightFromDie(DieNum,i)
+{
+    return 2*Math.min(2+i,DieNum*2-i)-1;
+}
+
+function GetMaxHeightFromDie(DieNum)
+{
+    return 2*DieNum + 1;
+}
+
+function DrawMountain()
+{
+    var Width = Mountain.Tiles.length;
+    var Height = GetMaxHeightFromDie(CSDieSides);
+    var ReturnStr = "";
+
+    for(var y = Height-1; y >= 0;y--)//draw tiles
+    {
+        for(var x = 0; x < Width; x++)
+        {
+            if(y < Mountain.Tiles[x].length)//if this tile is a part of the mountain
+            {
+                //CheckWinStatus
+                if(Mountain.Wins[x] != -1)//this column is no longer in play.
+                {
+                    if(Mountain.Wins[x] >= 0)
+                    {
+                        ReturnStr = ReturnStr.concat(CSPlayers[Mountain.Wins[x]][2]);
+                    }
+                    else
+                    {
+                        ReturnStr = ReturnStr.concat("🟦");//default value
+                    }
+                    continue;
+                }
+                
+                //Check tokens
+                var FoundToken = false;
+                for(var t = 0; t < TempTokens.length;t++)//search temp tokens  
+                {
+                    if(TempTokens[t].Line == x && TempTokens[t].Height == y)
+                    {
+                        ReturnStr = ReturnStr.concat("🧗");//Draw climber emoji
+                        FoundToken = true;
+                    }
+                }
+
+                if(FoundToken) continue;//skip below section if a token has been found.
+
+                if(Mountain.Tiles[x][y] == -1)
+                {
+                    ReturnStr = ReturnStr.concat("🌫️");//Draw a fog emoji
+                }
+                else
+                {
+                    var PlayerIdx = Mountain.Tiles[x][y];
+                    ReturnStr = ReturnStr.concat(CSPlayers[PlayerIdx][2]);//draw relavent player emoji
+                }
+            }
+            else
+            {
+                ReturnStr = ReturnStr.concat("🟦");//Draw blue sky
+            }
+        }
+        ReturnStr = ReturnStr.concat("\n");//new line
+    }
+
+    var NumDigits = Math.floor(Math.log10(Width)) + 1;//number of digits to draw.
+    for(var d = 0; d < NumDigits;d++)//draw numbers below.
+    {
+        for(var i = 0; i < Width; i++)
+        {
+            if(d >= i.toString().length) 
+            {
+                ReturnStr = ReturnStr.concat(emojis.randomBaseCampEmoji());
+            }
+            else
+            {   
+                var DigitEmoji = DigitToEmoji(GetNthDigit(i,d));
+                ReturnStr = ReturnStr.concat(DigitEmoji);
+            }
+        }
+        ReturnStr = ReturnStr.concat("\n");//new line
+    }
+
+    return ReturnStr;
+}
+
+async function CSStartNextTurn()
+{
+    TempTokens = [];
+    var Breif = DrawMountain() + "\nIt is <@!" + CSPlayers[CSTurnIdx][1].id + ">'s turn.\n";
+    await SendFragmented(CSChannel, Breif, 195);
+    CSTurnAction();
+}
+
+async function CSTurnAction()
+{
+    CSState = CS_STATES.ACTION;
+    var Breif = "=====================================\nUnused Tokens:" + ("🧗 ".repeat(3-TempTokens.length) + "\n");
+    CSRollDice();
+    Breif = Breif.concat("You rolled: ");
+    for(var i = 0; i < CurrentDice.length; i++)
+    {
+        Breif = Breif.concat(CSDiceEmoji(CurrentDice[i]));
+    }
+    Breif = Breif.concat("\nYou have the following options:\n");
+
+    for(var i = 0; i < DiceSplits.length;i++)
+    {
+        var Split = DiceSplits[i];
+        Breif = Breif.concat( CSDiceEmoji(CurrentDice[Split[0]]) + " " + CSDiceEmoji(CurrentDice[Split[1]]) + " + " +  CSDiceEmoji(CurrentDice[Split[2]]) + " " + CSDiceEmoji(CurrentDice[Split[3]]) + ":\n");
+        var NewActions = CSDetermineSplit(i);
+        for(var a = 0; a < NewActions.length; a++)
+        {
+            CurrentOptions.push(NewActions[a])
+            Breif = Breif.concat(CurrentOptions.length.toString() + ") " + DescribeDiceActions(NewActions[a]) + "\n");
+        }
+    }
+    var IsPossible = false;//Is it possible to continue?
+    for(var i = 0; i < CurrentOptions.length;i++)
+    {
+        if(CurrentOptions[i].Type != CS_ROLLTYPES.NOTPOSSIBLE) IsPossible = true;//it is possible
+    }
+
+    if(IsPossible)
+    {
+        Breif = Breif.concat("\nChoose one of these options by typing !action.\nEx:!action 3 to choose option 3.");
+        await CSChannel.send(Breif);
+    }
+    else
+    {
+        Breif = Breif.concat("\n:x:You ran out of options. Your turn is over.");
+        await CSChannel.send(Breif);
+        CSEndTurn();
+    }
+
+}
+
+function DescribeDiceActions(action)
+{
+    switch(action.Type)
+    {
+        case CS_ROLLTYPES.NOTPOSSIBLE:
+            return "❌ Not possible.";
+        case CS_ROLLTYPES.NORMALADD:
+            var Desc = "Advance on tracks ";
+            Desc = Desc + action.Values.join(" and ");
+            return Desc;
+        case CS_ROLLTYPES.EVENT:
+            var Desc = "Trigger " + action.Event + " on track " + action.Values[0];
+            return Desc;
+    }
+}
+
+function CSDetermineSplit(splitIdx)//returns an array of action objects.
+{
+    var Pairs = [[CurrentDice[DiceSplits[splitIdx][0]],CurrentDice[DiceSplits[splitIdx][1]]], [CurrentDice[DiceSplits[splitIdx][2]],CurrentDice[DiceSplits[splitIdx][3]]] ];
+    for(var p = 0; p < 2; p++)
+    {
+        if(DicePairContains(Pairs[p],CS_DICE_TYPES.EVENT) == 2)//a pair may not contain two event dice
+        {
+            return [{Type: CS_ROLLTYPES.NOTPOSSIBLE}];
+        }
+    }
+
+    var NumEvents = DicePairContains(CurrentDice, CS_DICE_TYPES.EVENT);
+    var ReturnActions = [];//Possible Actions
+    switch(NumEvents)
+    {
+        case 0:
+            var TracksToAdvance = [Pairs[0][0].Value + Pairs[0][1].Value, Pairs[1][0].Value + Pairs[1][1].Value];
+            var ActionToPush = {Type: CS_ROLLTYPES.NORMALADD, Values: []};//action to
+
+            for(var i = 0; i < TempTokens.length; i++)//check current tokens for available tracks.
+            {
+                if(TracksToAdvance.includes(TempTokens[i].Line) && Mountain.Wins[TempTokens[i].Line] == -1)
+                {
+                    ActionToPush.Values.push(TempTokens[i].Line);//add action to advance on that track.
+                    RemoveElement(TracksToAdvance, TempTokens[i].Line);
+                }
+            }
+            //Now check unused tokens for possible actions
+            var UnusedTokens = 3 - TempTokens.length;//number of unused tokens
+
+            if(UnusedTokens == 0)
+            {
+                ReturnActions.push(ActionToPush);//push the action
+            }
+            else if(UnusedTokens == 1)//this should be done by considering subsets but whatever
+            {
+                for(var i = 0; i < TracksToAdvance.length; i++)//
+                {
+                    if(Mountain.Wins[TracksToAdvance[i]] == -1)//-1 means it's available
+                    {
+                        var NewTracks = ActionToPush.Values.concat(TracksToAdvance[i]);
+                        if(TracksToAdvance.length == 2 && TracksToAdvance[0] == TracksToAdvance[1]) NewTracks.push(TracksToAdvance[i]);
+                        ReturnActions.push({Type: CS_ROLLTYPES.NORMALADD, Values: NewTracks});//add action to advance on that track.
+                    }
+                }
+            }
+            else if(UnusedTokens >= 2)
+            {
+                for(var i = 0; i < TracksToAdvance.length; i++)//
+                {
+                    if(Mountain.Wins[TracksToAdvance[i]] == -1)//-1 means it's available
+                    {
+                        ActionToPush.Values.push(TracksToAdvance[i]);
+                    }
+                }
+                ReturnActions.push(ActionToPush);//push the action
+            }
+            break;
+        case 1:
+            //Make it so that first pair has event in it.
+            if(DicePairContains(Pairs[1], CS_DICE_TYPES.EVENT) >= 1)//second pair has event
+            {
+                SwapElements(Pairs,0,1);//swap them so 0 has the event.
+            }
+
+            var MyEvent = '';
+            for(var i = 0; i < Pairs[0].length; i++)//find event
+            {
+                if(Pairs[0][i].Type == CS_DICE_TYPES.EVENT) MyEvent = Pairs[0][i].Value;
+            }
+
+            var TrackToAdvance = Pairs[1][0].Value +Pairs[1][1].Value;//Target track
+            for(var i = 0; i < 3; i++)//check current tokens for available tracks.
+            {
+                var ShouldAdd = false;
+                if(i < TempTokens.length)
+                {
+                    ShouldAdd = (TrackToAdvance == TempTokens[i].Line && Mountain.Wins[TrackToAdvance] == -1);
+                }
+                else//unassigned tokens
+                {
+                    ShouldAdd = (Mountain.Wins[TrackToAdvance] == -1);
+                }
+
+                if(ShouldAdd)
+                {
+                    ReturnActions.push({Type: CS_ROLLTYPES.EVENT, Event: MyEvent, Values: [TrackToAdvance]});//add action to advance on that track.
+                    break;
+                }
+            }
+            break;
+        case 2:
+            //Make it so that first dice of each pair has event in it.
+            var MyEvent = '';
+            for(var p = 0; p < Pairs.length; p++)//find event
+            {
+                if(Pairs[p][1].Type == CS_DICE_TYPES.EVENT) SwapElements(Pairs[p], 0,1);
+            }
+
+            var TrackToAdvance = Pairs[0][1].Value +Pairs[1][1].Value;//Target track
+            for(var i = 0; i < 3; i++)//check current tokens for available tracks.
+            {
+                var ShouldAdd = false;
+                if(i < TempTokens.length)
+                {
+                    ShouldAdd = (TrackToAdvance == TempTokens[i].Line && Mountain.Wins[TrackToAdvance] == -1);
+                }
+                else//unassigned tokens
+                {
+                    ShouldAdd = (Mountain.Wins[TrackToAdvance] == -1);
+                }
+
+                if(ShouldAdd)
+                {
+                    ReturnActions.push({Type: CS_ROLLTYPES.EVENT, Event: Pairs[0][0].Value, Values: [TrackToAdvance]});//add action to advance on that track.
+                    ReturnActions.push({Type: CS_ROLLTYPES.EVENT, Event: Pairs[1][0].Value, Values: [TrackToAdvance]});//add action to advance on that track.
+                    break;//Don't make any more actions based on this
+                }
+            }
+            break;
+    }
+
+    for(var i = 0; i < ReturnActions.length; i++)
+    {
+        if(ReturnActions[i].hasOwnProperty("Values") && ReturnActions[i].Values.length == 0)
+        {
+            ReturnActions.splice(i,1);
+            i--;
+        }
+    }
+
+    if(ReturnActions.length == 0) ReturnActions.push({Type: CS_ROLLTYPES.NOTPOSSIBLE});
+    return ReturnActions;
+}
+
+function ActionCS(msg, actionIdx)
+{
+    if(msg.channel !== CSChannel)
+    {
+        msg.reply("please say that in the channel where the game is being played.");
+        return;
+    }
+
+    if(CSState != CS_STATES.ACTION)
+    {
+        msg.reply("there's a time and place for everything. But not now!");
+        return;
+    }
+
+    if(msg.author.id !== CSPlayers[CSTurnIdx][1].id)
+    {
+        msg.reply("it's not your turn.");
+        return;
+    }
+
+    if(actionIdx >= CurrentOptions.length || actionIdx < 0 || !Number.isInteger(actionIdx))
+    {
+        msg.reply("not a valid option. Try again.");
+        return;
+    }
+
+    if(CurrentOptions[actionIdx].Type == CS_ROLLTYPES.NOTPOSSIBLE)
+    {
+        msg.reply("That option is not possible");
+        return;
+    }
+
+    CSExecuteAction(CurrentOptions[actionIdx]);
+    CSState = CS_STATES.CONTSTOP;
+    BreifCSStop();
+}
+
+
+
+function CalculateNewTokenHeight(Line, Height)
+{
+    var Top = Mountain.Tiles[Line].length-1;
+    do 
+    {
+        Height = Math.min(Height+1,Top);
+    }
+    while (Mountain.Tiles[Line][Height] != -1 && Height != Top);
+    return Height;
+}
+
+function BreifCSStop()
+{
+    CSChannel.send(DrawMountain() + "\n========================\nWould you like to stop or keep playing? Type !continue or !stop.\n(Also !c and !s work too.)");
+}
+
+function CSContinue(msg)
+{
+    if(msg.channel !== CSChannel)
+    {
+        msg.reply("please say that in the channel where the game is being played.");
+        return;
+    }
+
+    if(CSState != CS_STATES.CONTSTOP)
+    {
+        msg.reply("there's a time and place for everything. But not now!");
+        return;
+    }
+
+    if(msg.author.id !== CSPlayers[CSTurnIdx][1].id)
+    {
+        msg.reply("it's not your turn.");
+        return;
+    }
+    CSChannel.send("You decide to continue...");
+    CSTurnAction();
+}
+
+function CSStop(msg)
+{
+    CSChannel.send("You decide to stop...");
+    //Save temp tokens.
+    for(var t = 0; t < TempTokens.length;t++)
+    {
+
+        var x = TempTokens[t].Line;
+        var y = TempTokens[t].Height;
+        ReplaceElement(Mountain.Tiles[x],CSTurnIdx,-1);//remove old permo token
+        Mountain.Tiles[x][y] = CSTurnIdx;//add new permo token
+        if(y == Mountain.Tiles[x].length - 1) Mountain.Wins[x] = CSTurnIdx;
+    }
+    var Winner = GetWinner();
+    if(Winner == -1)
+    {
+        CSEndTurn();
+    }
+    else
+    {
+        CSChannel.send("=========================\n🎊🎊🎊" + CSPlayers[Winner][1].displayName + " has won.🎊🎊🎊");
+        BotStatus = STATUS.READY;
+    }
+}
+
+function GetWinner()//finds the index of the winner. If there is none, then returns -1
+{
+    var PlayerWinsTotal = new Array(CSPlayers.length).fill(0);;
+    for(var i = 0; i < Mountain.Wins;i++)
+    {
+        if(Mountain.Wins[i] != -1)
+        {
+            var PathWinner = Mountain.Wins[i];
+            PlayerWinsTotal[PathWinner]++;
+            if(PlayerWinsTotal[PathWinner] >= 3) return PathWinner;
+        }
+    }
+    return -1;
+}
+
+function CSEndTurn()
+{
+    CSTurnIdx = mod(CSTurnIdx + 1, CSPlayers.length);
+    CSStartNextTurn();
+}
+
+function DicePairContains(Dice, Type)
+{
+    var Total = 0;
+    for(var i = 0; i < Dice.length; i++)
+    {
+
+        if(Dice[i].Type == Type) Total++;
+    }
+    return Total;
+}
+
+function CSRollDice()
+{
+    CurrentDice = [];
+    CurrentOptions = [];
+    for(var i = 0; i < 4; i++)//roll 4 dice
+    {
+        var NewDice = {Type: '', Value: ''};
+        if(OneInN(EventProb))//1 in N chance
+        {
+            //special dice
+            NewDice.Type = CS_DICE_TYPES.EVENT;
+            NewDice.Value = RandEle(CS_DICE_EVENTS);
+        }
+        else
+        {
+            //normal number
+            NewDice.Type = CS_DICE_TYPES.NUMBER;
+            NewDice.Value = Math.floor(Math.random()*CSDieSides);
+        }
+        CurrentDice.push(NewDice);
+    }
+}
+
+function CSDiceEmoji(Die)
+{
+    if(Die.Type == CS_DICE_TYPES.NUMBER)
+    {
+        return DigitToEmoji(Die.Value);
+    }
+    else
+    {
+        switch(Die.Value)
+        {
+            case CS_DICE_EVENTS[0]://explosion
+                return "💥";
+            case CS_DICE_EVENTS[1]://rock slide
+                return "⏬"
+            case CS_DICE_EVENTS[2]://rock slide
+                return "🌪️"
+        }
+    }
+    return "🟦";//default blue square
+}
+
+function CSExecuteAction(Action)
+{
+    if(Action.Type == CS_ROLLTYPES.NOTPOSSIBLE)
+    {
+        console.log("ERROR: Impossible action.");
+        CloseBot();
+    }
+    //Apply normal token rules
+    for(var L = 0; L < Action.Values.length;L++)//for each line we need to progress on.
+    {
+        var LineToProgress = Action.Values[L];
+        var FoundToken = false;//does this line already have a temporary token on it?
+        //Search for tokens currently being used.
+        for(var i = 0; i < TempTokens.length;i++)
+        {
+            if(TempTokens[i].Line == LineToProgress)
+            {
+                TempTokens[i].Height = CalculateNewTokenHeight(LineToProgress, TempTokens[i].Height);
+                FoundToken = true;
+            }
+        }
+
+        if(!FoundToken)//if we haven't found one then add one.
+        {
+            var PlayerHeight = Mountain.Tiles[LineToProgress].indexOf(CSTurnIdx);//Height of the player on that line.
+            TempTokens.push({Line: LineToProgress, Height: CalculateNewTokenHeight(LineToProgress, PlayerHeight)});
+        }
+    }
+
+    if(Action.Type == CS_ROLLTYPES.EVENT)
+    {
+        var EventLine = Action.Values[0];
+        var TokenOnLineIdx = -1;//Find the index of the token on this event line.
+        for(var i = 0; i < TempTokens.length;i++)
+        {
+            if(TempTokens[i].Line == EventLine)
+            {
+                TokenOnLineIdx = i;
+                break;    
+            }
+        }
+        switch(Action.Event)
+        {
+            case CS_DICE_EVENTS[0]://Explosion. Shortens the line by 1. 
+                if(Mountain.Tiles[EventLine].length <= 1) break;
+                Mountain.Tiles[EventLine].splice(0,1);//delete first element.
+                TempTokens[TokenOnLineIdx].Height = TempTokens[TokenOnLineIdx].Height-1;
+                if(TempTokens[TokenOnLineIdx].Height < 0) TempTokens.splice(TokenOnLineIdx,1);//remove a temporary token that fell off the bottom.
+                break;
+
+            case CS_DICE_EVENTS[1]://Rock slide, everyone falls down to the bottom in a big pile
+                var LineLength = Mountain.Tiles[EventLine].length;
+                var PileOrder = [];
+                for(var y = 0; y < LineLength;y++)
+                {
+                    var CharacterOnLine = Mountain.Tiles[EventLine][y];
+                    if(CharacterOnLine >= 0)
+                    {
+                        PileOrder.push(CharacterOnLine);
+                    }
+                    else if(TempTokens[TokenOnLineIdx].Height == y)
+                    {
+                        PileOrder.push('t');
+                        TempTokens[TokenOnLineIdx].Height = PileOrder.length - 1;
+                    }
+                }
+
+                Mountain.Tiles[EventLine] = [];
+                for(var y = 0; y < LineLength;y++)
+                {
+                    if(y < PileOrder.length && !isNaN(PileOrder[y]))
+                    {
+                        Mountain.Tiles[EventLine].push(PileOrder[y]);
+                    }
+                    else
+                    {
+                        Mountain.Tiles[EventLine].push(-1);
+                    }
+                }
+                break;
+            case CS_DICE_EVENTS[2]://Tornado
+                var Path = Mountain.Tiles[EventLine].splice(0,Mountain.Tiles[EventLine].length - 1);//pop old elements
+                shuffle(Path);
+                var TokenPlace = 0;
+                do
+                {
+                    TokenPlace = hMath.floor(Math.random() * Path.length)
+                }
+                while(Path[TokenPlace] != -1)
+                TempTokens[TokenOnLineIdx].Height = TokenPlace;
+                Mountain.Tiles[EventLine] = Path.concat(-1);//add back the last element
+                break;
+        }
+    }
+}
+
+
+///
 ///Job Interview Simulator
 ///
 
@@ -573,17 +1328,6 @@ function JoinJobSim(msg)
     {
         msg.channel.send("You can't join; the game is already in progress.");
     }
-}
-
-function WhoJobs(msg)
-{
-    msg.channel.send("Players currently in the game:");
-    var PlayerList = "";
-    for (i = 0; i < JPlayers.length; i++) 
-    {
-        PlayerList =  PlayerList + " " + JPlayers[i][1].displayName + " |";
-    }
-    msg.channel.send(PlayerList + "\nTotal Players:" + JPlayers.length);
 }
 
 function StartJobSim(msg,settings)
@@ -960,7 +1704,6 @@ function GetTranscript()
     return ReturnStr;
 }
 
-
 ///
 ///Decrypto
 ///
@@ -1033,13 +1776,17 @@ function JoinDecrypto(msg)
 
 function WhoDecrypto(msg)
 {
-    msg.channel.send("Players currently in the game:");
-    var PlayerList = "";
-    for (i = 0; i < DPlayers.length; i++) 
+    if(DState == DECRYPTOSTATE.JOIN)
     {
-        PlayerList =  PlayerList + " " + DPlayers[i][1].displayName + " |";
+        WhoGame(DPlayers, msg);
     }
-    msg.channel.send(PlayerList);
+    else
+    {
+        msg.channel.send("Players on team "+ DTeamSymbols[0] +":");
+        WhoGame(DPlayers[0], msg);
+        msg.channel.send("Players on team "+ DTeamSymbols[1] +":");
+        WhoGame(DPlayers[1], msg);
+    }
 }
 
 function StartDecrypto(msg)
@@ -1172,8 +1919,11 @@ function BreifCluers()
         GlobalMessage = GlobalMessage + "<@!" + DPlayers[t][DCluers[t]][1].id +"> is giving clues for team " + DTeamSymbols[t] + ".\n";
     }
     DecryptoChannel.send(GlobalMessage);
-    DecryptoChannel.send(CreatePrevCluesEmbed(0));
-    DecryptoChannel.send(CreatePrevCluesEmbed(1));
+    if(DRound != 1)
+    {
+        DecryptoChannel.send(CreatePrevCluesEmbed(0));
+        DecryptoChannel.send(CreatePrevCluesEmbed(1));
+    }
 }
 
 function DecryptoGetMsgSender(msg)
@@ -1389,6 +2139,7 @@ function DecryptoOwnGuess(team, sequence)
         var TrueSeq = "";
         for(var i = 0; i < DSequences[team].length;i++)
         {
+            if(DSequences[team][i] != sequence[i]) DClues[team][i] = "# __" + DClues[team][i] + "__ #";//underline miscommunicated words
             TrueSeq = TrueSeq + (DSequences[team][i] + 1).toString() + " ";
         }
         DecryptoChannel.send("Team " + DTeamSymbols[team] + " has miscommunicated!:x:\nThe real sequence was " + TrueSeq);
@@ -3528,7 +4279,6 @@ function ClearDebts(msg)
 
 function CloseBot()
 {
-
     BOT.destroy();
 }
 
@@ -3580,26 +4330,31 @@ function DigitToEmoji(d)
     switch(d)
     {
         case 1:
-            return ":one:";
+            return "1️⃣";
         case 2:
-            return ":two:";
+            return "2️⃣";
         case 3:
-            return ":three:";
+            return "3️⃣";
         case 4:
-            return ":four:";
+            return "4️⃣";
         case 5:
-            return ":five:";
+            return "5️⃣";
         case 6:
-            return ":six:"; 
+            return "6️⃣"; 
         case 7:
-            return ":seven:";
+            return "7️⃣";
         case 8:
-            return ":eight:";
+            return "8️⃣";
         case 9:
-            return ":nine:";
+            return "9️⃣";
         case 0:
-            return ":zero:";            
+            return "0️⃣";            
     }
+}
+
+function GetNthDigit(num,idx)
+{
+    return Number(num.toString()[idx]);
 }
 
 function hasDuplicates(array) 
@@ -3634,6 +4389,41 @@ function ArrayEquals(a,b)
    } 
 }
 
+String.prototype.replaceAt=function(index, replacement)
+{
+    return this.substr(0, index) + replacement+ this.substr(index + replacement.length);
+}
+
+function OneInN(n)
+{
+    if(Math.floor(Math.random()*n) == 0)
+        return true;
+    else
+        return false;
+}
+
+function RemoveElement(arr,ele)
+{
+    var Index = arr.indexOf(ele);
+    arr.splice(Index,1);
+}
+
+function ReplaceElement(arr,ele,replacement)
+{
+    for(var i = 0; i < arr.length;i++)
+    {
+        if(arr[i] == ele) arr[i] = replacement;
+    }
+}
+
+function SwapElements(arr,i,j)
+{
+    if(i==j) return;
+    var t = arr[i];
+    arr[i] = arr[j];
+    arr[j] = t;
+}
+
 function GetMsgSenderIdx(PersonID, PlayerList)
 {
     for(var i = 0; i < PlayerList.length; i++)
@@ -3643,9 +4433,53 @@ function GetMsgSenderIdx(PersonID, PlayerList)
     return -1;
 }
 
+function WhoGame(Players, msg)
+{
+    var PlayerList = "Players currently in the game:\n";
+    for (i = 0; i < Players.length; i++) 
+    {
+        PlayerList =  PlayerList + Players[i][1].displayName + " | ";
+    }
+    msg.channel.send(PlayerList + "\nTotal Players:" + Players.length);
+}
+
 async function DeleteMessage(msg, thereason)
 {
     var BotMessage = await msg.reply(thereason);
     await msg.delete({timeout: 1000, reason: thereason});
     BotMessage.delete({timeout: 0, reason: ""});
 }
+
+const DISCORDMAXCHAR = 2000;
+
+function FragmentMessage(contents,MaxBucketSize)
+{
+    var Buckets = [""];
+    var Lines = contents.split(/\r?\n/);
+    for(var i = 0; i < Lines.length;i++)
+    {
+        if(Lines[i].length > MaxBucketSize)
+            return ["ERROR: LINE TO LONG."];
+        var CurrentBucketLen = G_splitter.splitGraphemes(Buckets[Buckets.length - 1]).length;
+        var NewLineLen = G_splitter.splitGraphemes(Lines[i]).length;
+        if(CurrentBucketLen + NewLineLen <= MaxBucketSize)//if new line will fit
+        {
+            Buckets[Buckets.length - 1] = Buckets[Buckets.length - 1].concat("\n" + Lines[i]); //add to current bucket         
+        }
+        else
+        {
+            Buckets.push(Lines[i]);//start new bucket
+        }
+    }
+    return Buckets;
+}
+
+async function SendFragmented(channel, message, MaxBucketSize)
+{
+    Buckets = FragmentMessage(message, MaxBucketSize);
+    for(var i = 0; i < Buckets.length; i++)
+    {
+        await channel.send(Buckets[i]);
+    }
+}
+
