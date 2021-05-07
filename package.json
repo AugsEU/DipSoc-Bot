@@ -16,6 +16,6 @@
     "ffmpeg-static": "^4.0.1",
     "grapheme-splitter": "^1.0.4",
     "node-fetch": "^2.6.0",
-    "underscore": "^1.10.2"
+    "underscore": "^1.12.1"
   }
 }
